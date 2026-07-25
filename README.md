@@ -1,4 +1,4 @@
-# CogniSphere - AI MultiModal Knowledge Assistant
+# 🧠 CogniSphere - AI Multimedia Knowledge Assistant
 
 A production-ready Retrieval-Augmented Generation (RAG) assistant capable of understanding multimedia content using **Streamlit + FastAPI + LangChain + SQLite + ChromaDB + Faster-Whisper + EasyOCR**.
 
