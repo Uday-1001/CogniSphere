@@ -89,25 +89,64 @@ WHISPER_DEVICE=cpu
 
 ## Architecture Flow
 
-```
-Streamlit Frontend
-       ↓
-REST API (FastAPI)
-       ↓
-Processing Pipeline
-        ├─ Audio/Video → Faster-Whisper Transcription
-        ├─ Document Parsing → Docling (Primary) / PyMuPDF (Fallback)
-        └─ Scanned PDF → Parallel EasyOCR Pipeline
-       ↓
-RecursiveCharacterTextSplitter (Optimized Chunking) → Metadata Enrichment
-       ↓
-Embedding Generation (HuggingFace) → ChromaDB Vector Store
-       ↓
-Multi-Query Expansion → Hybrid Retriever (BM25 + Chroma) → CrossEncoder Reranker
-       ↓
-RAG Chain (Gemini → Groq → Ollama) → LLM Response
-       ↓
-Answer with Document Sources & Timestamps
+```mermaid
+flowchart TD
+    %% Nodes
+    UI("💻 Streamlit Frontend")
+    API{"⚡ REST API (FastAPI)"}
+    
+    subgraph "Processing Pipeline"
+        AV("🎵 Audio/Video<br>Faster-Whisper")
+        Doc("📄 Document Parsing<br>Docling / PyMuPDF")
+        Scan("📸 Scanned PDF<br>Parallel EasyOCR")
+    end
+    
+    Chunking("✂️ RecursiveCharacterTextSplitter<br>+ Metadata Enrichment")
+    Embed("🧠 Embedding Generation<br>(HuggingFace)")
+    DB[("🗄️ ChromaDB Vector Store")]
+    
+    subgraph "Retrieval Pipeline"
+        MQE("🔍 Multi-Query Expansion")
+        Hybrid("🔄 Hybrid Retriever<br>(BM25 + Chroma)")
+        Rerank("🎯 CrossEncoder Reranker")
+    end
+    
+    subgraph "RAG Chain (LLM)"
+        Gemini("🟢 Gemini (Primary)")
+        Groq("🟡 Groq (Fallback 1)")
+        Ollama("🔴 Ollama (Fallback 2)")
+    end
+    
+    Out("✅ Answer with Document Sources & Timestamps")
+    
+    %% Edges
+    UI <-->|User Interaction| API
+    
+    API -->|Upload Media| AV
+    API -->|Upload Text PDF| Doc
+    API -->|Upload Scanned PDF| Scan
+    
+    AV --> Chunking
+    Doc --> Chunking
+    Scan --> Chunking
+    
+    Chunking --> Embed
+    Embed --> DB
+    
+    API -->|User Query| MQE
+    MQE --> Hybrid
+    DB -.->|Fetch Documents| Hybrid
+    Hybrid --> Rerank
+    
+    Rerank --> Gemini
+    Gemini -.->|Failover| Groq
+    Groq -.->|Failover| Ollama
+    
+    Gemini --> Out
+    Groq --> Out
+    Ollama --> Out
+    
+    Out -->|Return Response| UI
 ```
 
 ## Usage
