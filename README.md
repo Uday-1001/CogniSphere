@@ -43,50 +43,6 @@ cp .env.example .env
 mkdir -p storage/uploads storage/transcripts storage/temp chroma_db
 ```
 
-## Running the Application
-
-### Backend (FastAPI)
-The backend handles all heavy lifting: chunking, OCR, embeddings, and LLM querying.
-```bash
-cd backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Frontend (Streamlit)
-The frontend provides the conversational UI and dashboard.
-```bash
-cd frontend
-streamlit run Home.py
-```
-
-## Configuration (.env)
-
-Here is a sample of the key configuration variables:
-
-```env
-# Database
-DATABASE_URL=sqlite:///./multimedia_assistant.db
-
-# LLM Fallback Chain (Primary -> Secondary -> Local)
-LLM_PROVIDER=google
-GOOGLE_API_KEY=your_gemini_key
-GROQ_API_KEY=your_groq_key
-LLM_MODEL=gemini-2.5-flash
-OLLAMA_FALLBACK_MODEL=phi3
-
-# Embeddings
-EMBEDDING_PROVIDER=huggingface
-
-# OCR Pipeline
-OCR_LANGUAGE=en
-OCR_DPI=200
-OCR_MAX_WORKERS=4
-
-# Whisper settings
-WHISPER_MODEL_SIZE=base
-WHISPER_DEVICE=cpu
-```
-
 ## Architecture Flow
 
 ```mermaid
@@ -147,6 +103,50 @@ flowchart TD
     Ollama --> Out
     
     Out -->|Return Response| UI
+```
+
+## Running the Application
+
+### Backend (FastAPI)
+The backend handles all heavy lifting: chunking, OCR, embeddings, and LLM querying.
+```bash
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Frontend (Streamlit)
+The frontend provides the conversational UI and dashboard.
+```bash
+cd frontend
+streamlit run Home.py
+```
+
+## Configuration (.env)
+
+Here is a sample of the key configuration variables:
+
+```env
+# Database
+DATABASE_URL=sqlite:///./multimedia_assistant.db
+
+# LLM Fallback Chain (Primary -> Secondary -> Local)
+LLM_PROVIDER=google
+GOOGLE_API_KEY=your_gemini_key
+GROQ_API_KEY=your_groq_key
+LLM_MODEL=gemini-2.5-flash
+OLLAMA_FALLBACK_MODEL=phi3
+
+# Embeddings
+EMBEDDING_PROVIDER=huggingface
+
+# OCR Pipeline
+OCR_LANGUAGE=en
+OCR_DPI=200
+OCR_MAX_WORKERS=4
+
+# Whisper settings
+WHISPER_MODEL_SIZE=base
+WHISPER_DEVICE=cpu
 ```
 
 ## Usage
