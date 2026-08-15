@@ -1,3 +1,3 @@
-__all__ = ["chroma"]
+__all__ = ["qdrant"]
 
-from . import chroma
+from . import qdrant

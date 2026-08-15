@@ -1,9 +1,6 @@
-# Standardises metadata for all documents before vector storage
-
 import uuid
 from typing import Optional, List, Dict
 from langchain_core.documents import Document
-
 
 class MetadataEnricher:
 
@@ -13,30 +10,24 @@ class MetadataEnricher:
         file_id: int,
         filename: str,
         chunk_number: int,
-        # Location in original document
         page_number: Optional[int] = None,
         timestamp_start: Optional[str] = None,
         timestamp_end: Optional[str] = None,
-        # Source extraction details
         section: Optional[str] = None,
         parser_used: Optional[str] = None,
         is_ocr: Optional[bool] = None,
         document_type: Optional[str] = None,
-        # Output quality metrics
         ocr_confidence: Optional[float] = None,
         language: str = "en",
     ) -> Document:
-        # Standardise metadata for a single Document in-place
-        meta = document.metadata  # mutate in place
+        meta = document.metadata
 
-        # Add core identifiers
         meta["document_id"]   = str(file_id)
         meta["filename"]      = filename
         meta["chunk_number"]  = chunk_number
         meta["embedding_id"]  = str(uuid.uuid4())
         meta["language"]      = language
 
-        # Add positioning info
         meta["page_number"] = (
             page_number
             if page_number is not None
@@ -45,7 +36,6 @@ class MetadataEnricher:
         meta["timestamp_start"] = timestamp_start
         meta["timestamp_end"]   = timestamp_end
 
-        # Add processing details
         meta["section"] = (
             section
             if section is not None
@@ -67,18 +57,15 @@ class MetadataEnricher:
             else meta.get("document_type", "digital")
         )
 
-        # Add extraction quality metrics
         meta["ocr_confidence"] = (
             ocr_confidence
             if ocr_confidence is not None
             else meta.get("ocr_confidence")
         )
 
-        # Remove redundant keys
-        meta.pop("page", None)  # replaced by page_number
+        meta.pop("page", None)
 
         return document
-
 
 
     def extract_timestamps_from_segments(
@@ -89,12 +76,26 @@ class MetadataEnricher:
         if not segments:
             return None, None
 
-        words = content.split()[:5]
-        content_start = " ".join(words)
+        words = content.split()
+        if not words:
+            return None, None
+
+        content_start = " ".join(words[:5])
+        content_end = " ".join(words[-5:])
+
+        ts_start = segments[0].get("start")
+        ts_end = segments[-1].get("end")
 
         for segment in segments:
             seg_text = segment.get("text", "")
             if content_start in seg_text or seg_text.startswith(content[:20]):
-                return segment.get("start"), segment.get("end")
+                ts_start = segment.get("start")
+                break
 
-        return segments[0].get("start"), segments[-1].get("end")
+        for segment in reversed(segments):
+            seg_text = segment.get("text", "")
+            if content_end in seg_text or seg_text.endswith(content[-20:]):
+                ts_end = segment.get("end")
+                break
+
+        return ts_start, ts_end

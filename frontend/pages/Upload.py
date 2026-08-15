@@ -30,7 +30,6 @@ TYPE_META = {
 
 
 def get_file_type(filename: str) -> Optional[str]:
-    # Map file extensions to their broad category (video, audio, document)
     file_extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     for format_category, valid_extensions in SUPPORTED_FORMATS.items():
         if file_extension in valid_extensions:
@@ -52,7 +51,6 @@ ERROR_HINTS = {
 
 
 def friendly_error(response=None, exception: Optional[Exception] = None) -> str:
-    # Parse raw error details into friendly UI messages
     raw = ""
     if exception is not None:
         raw = str(exception).lower()
@@ -130,8 +128,7 @@ def main():
         </div>
         <div style="color:var(--text-muted); font-size:1rem; margin-bottom:1.5rem; max-width:620px;">
             Drop in a lecture video, a podcast episode, a research paper — 
-            anything you want to be able to <b>ask questions about</b>. We handle 
-            transcription and indexing automatically.
+            anything you want to be able to <b>ask questions about</b>. Leave the rest on Us.
         </div>
         """,
         unsafe_allow_html=True,
@@ -141,15 +138,16 @@ def main():
     st.markdown(
         """
         <div style="margin-bottom:1.75rem;">
+            <p><b>Supported Formats are : </b></p>
             <span class="format-pill pill-video">🎬 MP4</span>
             <span class="format-pill pill-video">🎬 MOV</span>
             <span class="format-pill pill-video">🎬 MKV</span>
-            <span class="format-pill pill-video">🎬 AVI</span>
             <span class="format-pill pill-video">🎬 WEBM</span>
+            <br>
             <span class="format-pill pill-audio">🎙️ MP3</span>
             <span class="format-pill pill-audio">🎙️ WAV</span>
             <span class="format-pill pill-audio">🎙️ M4A</span>
-            <span class="format-pill pill-audio">🎙️ FLAC</span>
+            <br>
             <span class="format-pill pill-document">📄 PDF</span>
             <span class="format-pill pill-document">📄 DOCX</span>
             <span class="format-pill pill-document">📄 PPTX</span>
@@ -161,8 +159,7 @@ def main():
 
 
     uploaded_file = st.file_uploader(
-        "Drag & drop your file here, or click to browse",
-        type=["mp4","mov","mkv","avi","webm","mp3","wav","m4a","flac","pdf","docx","pptx","txt"],
+        "👇 Drag & drop your file here, or click to browse",
         help="Up to 200 MB per file. Videos and audio are auto-transcribed with Whisper.",
         label_visibility="visible",
     )
@@ -240,7 +237,7 @@ def main():
 
                         result = response.json()
                         file_id = result.get("file_id")
-                        st.write(f"✅ File received! ID: `{file_id}`")
+                        st.write(f"✅ File received with ID : `{file_id}`")
 
 
                         status.update(label="⚙️ Starting processing...", expanded=True)
@@ -321,7 +318,7 @@ def main():
     s1, s2, s3 = st.columns(3)
     steps = [
         (s1, "#60A5FA", "01", "Upload",
-         "Drop any video, audio, or document file using the uploader above."),
+         "Drop any video, audio, or document file using the uploader above for its knowledge extraction."),
         (s2, "#C084FC", "02", "Auto-Process",
          "We transcribe audio/video with Whisper and extract text from documents — all automatically."),
         (s3, "#4ADE80", "03", "Chat",
@@ -331,18 +328,14 @@ def main():
         with col:
             st.markdown(
                 f"""
-                <div class="info-card">
-                    <div style="display:flex; align-items:center; margin-bottom:0.6rem;">
-                        <div class="step-num" style="background:rgba(255,255,255,0.06);
-                                    color:{color};">{num}</div>
-                        <span style="font-weight:700; color:var(--text-main);">{label}</span>
-                    </div>
-                    <div style="color:var(--text-muted); font-size:0.88rem; line-height:1.5;">{body}</div>
+                <div class="step-card" style="--step-color: {color};">
+                    <div class="step-number" style="color:{color};">{num}</div>
+                    <div class="step-title">{label}</div>
+                    <div class="step-desc">{body}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-
 
 if __name__ == "__main__":
     main()

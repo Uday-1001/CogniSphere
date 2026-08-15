@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import sys
 import os
-from datetime import datetime
 
 st.set_page_config(
     page_title="AI Multimedia Assistant",
@@ -16,7 +15,6 @@ ui_enhancer.apply_custom_theme()
 
 API_BASE_URL = "http://localhost:8000"
 
-# Custom CSS for the History page components
 st.markdown(
     """
     <style>
@@ -109,7 +107,6 @@ def status_pill(status: str) -> str:
 
 
 def main():
-    # Render main page title and description
     st.markdown(
         """
         <div style="margin-bottom:1.5rem;">
@@ -126,7 +123,6 @@ def main():
 
     tab1, tab2 = st.tabs(["💬 Chat Sessions", "📁 Uploaded Documents"])
 
-    # Render the Chat Sessions tab
     with tab1:
         st.markdown(
             "<div style='color:var(--text-muted); font-size:0.88rem; margin-bottom:1rem;'>"
@@ -176,7 +172,6 @@ def main():
                                     role    = message.get("role", "unknown")
                                     content = message.get("content", "")
                                     
-                                    # Truncate extremely long messages (e.g. parsed docs) to prevent browser freezes
                                     if len(content) > 3000:
                                         content = content[:3000] + "\n\n... *(Message truncated for display)*"
                                         
@@ -201,9 +196,8 @@ def main():
         except Exception as error:
             st.error(f"Could not reach the server: {error}")
 
-    # Render the Uploaded Documents tab
     with tab2:
-        col_search, col_space = st.columns([3, 4])
+        col_search, col_bulk = st.columns([4, 3])
         with col_search:
             search_query = st.text_input(
                 "Search your knowledge base",
@@ -227,6 +221,27 @@ def main():
                 if search_query:
                     documents = [d for d in documents if search_query.lower() in d.get("filename", "").lower()]
 
+                # Calculate selected documents
+                selected_docs = [d["id"] for d in documents if st.session_state.get(f"sel_doc_{d['id']}", False)]
+                
+                with col_bulk:
+                    if selected_docs:
+                        st.markdown("<div style='text-align:right;'>", unsafe_allow_html=True)
+                        if st.button(f"🗑️ Delete {len(selected_docs)} Selected", use_container_width=False, type="primary"):
+                            delete_response = requests.delete(
+                                f"{API_BASE_URL}/history/documents/bulk",
+                                json={"file_ids": selected_docs},
+                                timeout=30,
+                            )
+                            if delete_response.status_code == 200:
+                                st.success(f"Successfully removed {len(selected_docs)} documents.")
+                                for doc_id in selected_docs:
+                                    st.session_state[f"sel_doc_{doc_id}"] = False
+                                st.rerun()
+                            else:
+                                st.error("Could not delete the selected files. Please try again.")
+                        st.markdown("</div>", unsafe_allow_html=True)
+
                 if not documents:
                     st.markdown(
                         """
@@ -243,6 +258,20 @@ def main():
                         unsafe_allow_html=True,
                     )
                 else:
+                    if documents:
+                        col_sa, col_cs, _ = st.columns([2, 2, 8])
+                        with col_sa:
+                            if st.button("☑️ Select All", use_container_width=True):
+                                for d in documents:
+                                    st.session_state[f"sel_doc_{d['id']}"] = True
+                                st.rerun()
+                        with col_cs:
+                            if st.button("☐ Clear Selection", use_container_width=True):
+                                for d in documents:
+                                    st.session_state[f"sel_doc_{d['id']}"] = False
+                                st.rerun()
+                        st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
+
                     for document in documents:
                         file_type  = document.get("file_type", "document")
                         icon   = TYPE_ICON.get(file_type, "📁")
@@ -251,7 +280,7 @@ def main():
                         file_size_mb  = document.get("file_size_mb")
                         formatted_size = f"{file_size_mb:.2f} MB" if file_size_mb else ""
 
-                        info_column, button_column = st.columns([6, 1])
+                        info_column, action_column = st.columns([7, 1])
                         with info_column:
                             st.markdown(
                                 f"""
@@ -269,18 +298,9 @@ def main():
                                 """,
                                 unsafe_allow_html=True,
                             )
-                        with button_column:
-                            st.markdown("<div style='padding-top:0.6rem;'>", unsafe_allow_html=True)
-                            if st.button("🗑️ Delete", key=f"del_{document.get('id')}", use_container_width=True):
-                                delete_response = requests.delete(
-                                    f"{API_BASE_URL}/history/document/{document.get('id')}",
-                                    timeout=30,
-                                )
-                                if delete_response.status_code == 200:
-                                    st.success(f"'{file_name}' removed from your library.")
-                                    st.rerun()
-                                else:
-                                    st.error("Could not delete the file. Please try again.")
+                        with action_column:
+                            st.markdown("<div style='padding-top:1.4rem; padding-left:1rem;'>", unsafe_allow_html=True)
+                            st.checkbox("Select", key=f"sel_doc_{document.get('id')}", label_visibility="collapsed")
                             st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.error(f"Could not load documents: {response.text}")

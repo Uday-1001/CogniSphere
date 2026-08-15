@@ -161,23 +161,30 @@ def main():
 
     feature_col_1, feature_col_2, feature_col_3, feature_col_4 = st.columns(4)
     feature_cards = [
-        (feature_col_1, "#60A5FA", "📄", "Any Format, Anywhere",
-         "PDFs, Scanned Docs, DOCX, PPTX, TXT, MP4, MP3 & more. We extract the knowledge automatically."),
+        (feature_col_1, "#60A5FA", "📄", "Versatile Formats",
+         "PDFs, Scanned Docs, MP4 etc. We identify and extract the knowledge automatically."),
         (feature_col_2, "#4ADE80", "🧠", "Smart OCR Included",
          "Image-heavy or scanned PDFs? No problem. Our built-in OCR pipeline reads them flawlessly."),
         (feature_col_3, "#C084FC", "🕒", "Pinpoint Accuracy",
          "Every answer includes exact timestamps or page numbers so you can verify the source instantly."),
         (feature_col_4, "#FBBF24", "🛡️", "Total Privacy",
-         "Your files and conversations stay completely private and secure within your own infrastructure."),
+         "Your files and conversations stay completely private and secure within your system."),
     ]
     for column, hex_color, emoji_icon, card_title, card_description in feature_cards:
         with column:
             st.markdown(
                 f"""
-                <div class="feature-card">
-                    <div class="feature-icon" style="color:{hex_color};">{emoji_icon}</div>
-                    <div class="feature-title">{card_title}</div>
-                    <div class="feature-desc">{card_description}</div>
+                <div class="flip-card">
+                    <div class="flip-card-inner">
+                        <div class="flip-card-front" style="border-top: 3px solid {hex_color}aa;">
+                            <div class="feature-icon" style="color:{hex_color}; filter: drop-shadow(0 0 15px {hex_color}60); font-size: 2.8rem; margin-bottom: 1.5rem;">{emoji_icon}</div>
+                            <div class="feature-title" style="font-size: 1.25rem;">{card_title}</div>
+                        </div>
+                        <div class="flip-card-back" style="border-color:{hex_color};">
+                            <div class="feature-title" style="margin-bottom: 1rem; color:{hex_color};">{card_title}</div>
+                            <div class="feature-desc">{card_description}</div>
+                        </div>
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -196,23 +203,20 @@ def main():
     )
 
     s1, s2, s3 = st.columns(3)
-    instruction_steps = [
-        (s1, "01", "#60A5FA", "Upload",
-         "Go to the <b>Upload</b> page and drop in any file — PDF, video, audio, or document."),
-        (s2, "02", "#C084FC", "Process",
-         "The system automatically transcribes, extracts, and indexes your content into the knowledge base."),
-        (s3, "03", "#4ADE80", "Ask",
-         "Head to the <b>Chat</b> page and ask anything. Receive rich answers with source citations."),
+    steps = [
+        (s1, "#60A5FA", "01", "Ingest", "Securely provide your multimedia files and documents. The platform supports a wide variety of audio, video, and text formats.", "📤"),
+        (s2, "#C084FC", "02", "Analyze", "Advanced AI models immediately transcribe, extract, and semantically index the core knowledge hidden within your data.", "⚙️"),
+        (s3, "#4ADE80", "03", "Interact", "Converse naturally with your personalized knowledge base to get instant, highly accurate answers backed by citations.", "💬"),
     ]
-    for column, step_number, hex_color, step_label, step_description in instruction_steps:
+    for column, hex_color, step_number, step_label, step_description, icon in steps:
         with column:
             st.markdown(
                 f"""
-                <div class="feature-card" style="align-items:flex-start; text-align:left;">
-                    <div style="font-size:2rem; font-weight:900; color:{hex_color};
-                                margin-bottom:0.75rem; opacity:0.7;">{step_number}</div>
-                    <div class="feature-title" style="margin-bottom:0.5rem;">{step_label}</div>
-                    <div class="feature-desc">{step_description}</div>
+                <div class="timeline-card" style="--timeline-color: {hex_color};">
+                    <div class="timeline-bg-num">{step_number}</div>
+                    <div class="timeline-icon">{icon}</div>
+                    <div class="timeline-title">{step_label}</div>
+                    <div class="timeline-desc">{step_description}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,

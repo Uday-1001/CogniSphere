@@ -1,22 +1,21 @@
 # 🧠 CogniSphere - AI Multimedia Knowledge Assistant
 
-A production-ready Retrieval-Augmented Generation (RAG) assistant capable of understanding multimedia content using **Streamlit + FastAPI + LangChain + SQLite + ChromaDB + Faster-Whisper + EasyOCR**.
+A production-ready Retrieval-Augmented Generation (RAG) assistant capable of understanding multimedia content using **Streamlit + FastAPI + LangGraph + SQLite + Qdrant + Faster-Whisper + EasyOCR**.
 
 ## Features
 
 - **Multimedia Processing:** Upload and process videos (mp4, mov, mkv, avi, webm), audio (mp3, wav, m4a, flac), and documents (pdf, docx, pptx, txt).
 - **Intelligent PDF Handling:** Uses **Docling** as the primary parser for deep document understanding, with fallback to PyMuPDF and an advanced parallel **EasyOCR** pipeline for scanned/image-based documents.
 - **Audio/Video Transcription:** Automatic, high-quality transcription using Faster-Whisper.
-- **Robust LLM Fallback Chain:** Never goes down! Primary inference through **Gemini**, with automatic fallback to **Groq (Llama)**, and finally local **Ollama** if APIs fail.
-- **Advanced Hybrid Retrieval:** Combines sparse (BM25) and dense (ChromaDB) vector search, augmented with **Multi-Query Expansion** and **CrossEncoder Reranking** for high-precision semantic retrieval.
-- **Modern UI:** A sleek, fully-featured dark-mode Streamlit frontend with interactive feature cards and real-time processing statistics.
+- **LLM Integration:** Inference powered by **Groq**, using `gpt-oss-120b` as primary and `gpt-oss-20b` as fallback for lightning-fast RAG responses.
+- **Advanced Hybrid Retrieval:** Combines sparse (BM25) and dense (Qdrant) vector search, augmented with **Multi-Query Expansion** and **CrossEncoder Reranking** for high-precision semantic retrieval.
+- **Modern UI:** A sleek, fully-featured dark-mode Streamlit frontend featuring a custom `ui_enhancer.py` with 3D flip cards, glassmorphism timeline steps, prompt pills, and real-time processing statistics.
 - **Rich Citations:** Natural language Q&A with exact source citations and timestamp references for multimedia.
 
 ## Prerequisites
 
 - Python 3.10+
 - FFmpeg (required for video/audio processing)
-- Ollama (optional, for local LLM fallback and embeddings)
 
 ## Setup
 
@@ -35,12 +34,12 @@ pip install -r requirements.txt
 3. **Configure environment:**
 ```bash
 cp .env.example .env
-# Edit .env with your API keys (Google Gemini, Groq)
+# Edit .env with your API keys (Groq)
 ```
 
 4. **Create necessary directories:**
 ```bash
-mkdir -p storage/uploads storage/transcripts storage/temp chroma_db
+mkdir -p storage/uploads storage/transcripts storage/temp storage/qdrant
 ```
 
 ## Architecture Flow
@@ -57,23 +56,22 @@ flowchart TD
         Scan("📸 Scanned PDF<br>Parallel EasyOCR")
     end
     
-    Chunking("✂️ RecursiveCharacterTextSplitter<br>+ Metadata Enrichment")
+    Chunking("✂️ RecursiveCharacter<br>TextSplitter<br>+ Metadata Enrichment")
     Embed("🧠 Embedding Generation<br>(HuggingFace)")
-    DB[("🗄️ ChromaDB Vector Store")]
+    DB[("🗄️ Qdrant Vector Store")]
     
     subgraph "Retrieval Pipeline"
         MQE("🔍 Multi-Query Expansion")
-        Hybrid("🔄 Hybrid Retriever<br>(BM25 + Chroma)")
+        Hybrid("🔄 Hybrid Retriever<br>(BM25 + Qdrant)")
         Rerank("🎯 CrossEncoder Reranker")
     end
     
-    subgraph "RAG Chain (LLM)"
-        Gemini("🟢 Gemini (Primary)")
-        Groq("🟡 Groq (Fallback 1)")
-        Ollama("🔴 Ollama (Fallback 2)")
+    subgraph "LangGraph RAG Workflow"
+        Groq1("🟢 Groq (gpt-oss-120b)")
+        Groq2("🟡 Groq (gpt-oss-20b)")
     end
     
-    Out("✅ Answer with Document Sources & Timestamps")
+    Out("✅ Answer with Document<br>Sources & Timestamps")
     
     %% Edges
     UI <-->|User Interaction| API
@@ -94,13 +92,11 @@ flowchart TD
     DB -.->|Fetch Documents| Hybrid
     Hybrid --> Rerank
     
-    Rerank --> Gemini
-    Gemini -.->|Failover| Groq
-    Groq -.->|Failover| Ollama
+    Rerank --> Groq1
+    Groq1 -.->|Failover| Groq2
     
-    Gemini --> Out
-    Groq --> Out
-    Ollama --> Out
+    Groq1 --> Out
+    Groq2 --> Out
     
     Out -->|Return Response| UI
 ```
@@ -129,12 +125,9 @@ Here is a sample of the key configuration variables:
 # Database
 DATABASE_URL=sqlite:///./multimedia_assistant.db
 
-# LLM Fallback Chain (Primary -> Secondary -> Local)
-LLM_PROVIDER=google
-GOOGLE_API_KEY=your_gemini_key
+# LLM Integration
+LLM_PROVIDER=gpt-oss-120b
 GROQ_API_KEY=your_groq_key
-LLM_MODEL=gemini-2.5-flash
-OLLAMA_FALLBACK_MODEL=phi3
 
 # Embeddings
 EMBEDDING_PROVIDER=huggingface

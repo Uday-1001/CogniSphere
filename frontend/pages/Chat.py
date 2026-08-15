@@ -16,7 +16,6 @@ ui_enhancer.apply_custom_theme()
 
 API_BASE_URL = "http://localhost:8000"
 
-# Initialize session state for tracking chat history and selected files
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "session_id" not in st.session_state:
@@ -28,7 +27,6 @@ if "show_end_dialog" not in st.session_state:
 
 
 def do_end_session():
-    # Clear chat history and reset session
     if st.session_state.session_id:
         try:
             response = requests.post(
@@ -46,7 +44,6 @@ def do_end_session():
 
 
 def main():
-    # Custom styling for the Chat page components
     st.markdown(
         """
         <style>
@@ -72,7 +69,6 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Sidebar for selecting data sources and managing the session
     with st.sidebar:
         st.markdown(
             "<div style='font-size:1.1rem; font-weight:700; color:var(--text-main);"
@@ -86,7 +82,6 @@ def main():
             unsafe_allow_html=True,
         )
 
-        # Dropdown to filter context to a specific document
         try:
             response = requests.get(f"{API_BASE_URL}/history/documents", timeout=5)
             if response.status_code == 200:
@@ -97,20 +92,19 @@ def main():
                     if document.get("status") == "processed"
                 }
                 selected_document = st.selectbox(
-                    "Filter source",
+                    "Filter source :",
                     options=[None] + list(document_options.keys()),
-                    format_func=lambda source: "✨ All Sources" if source is None else f"📄 {source}",
+                    format_func=lambda source: "✨ All Sources Selected" if source is None else f"📄 {source}",
                 )
                 st.session_state.file_id = document_options.get(selected_document) if selected_document else None
             else:
                 st.session_state.file_id = None
         except Exception:
-            st.warning("⚠️ Could not reach the backend. Is the server running?")
+            st.warning("⚠️ Think that the Server is resting...")
             st.session_state.file_id = None
 
         st.markdown("<hr style='border-color:var(--border-color); margin:1rem 0;'>", unsafe_allow_html=True)
 
-        # Display current session metrics
         message_count = len(st.session_state.messages)
         st.markdown(
             f"""
@@ -130,16 +124,14 @@ def main():
             unsafe_allow_html=True,
         )
 
-        # Bottom spacer before session controls
         st.markdown("<div style='min-height:40px;'></div>", unsafe_allow_html=True)
 
         st.markdown("<div class='end-session-btn'>", unsafe_allow_html=True)
-        if st.button("⏹️ End Session", use_container_width=True, key="end_session_btn"):
+        if st.button(" ⛔ End Session", use_container_width=True, key="end_session_btn"):
             st.session_state.show_end_dialog = True
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Render a mock user profile card
         st.markdown(
             """
             <div style="background-color:var(--surface-color); border:1px solid var(--border-color);
@@ -157,7 +149,6 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # Render the confirmation dialog for ending a session
     if st.session_state.show_end_dialog:
         st.markdown(
             """
@@ -176,6 +167,8 @@ def main():
             unsafe_allow_html=True,
         )
         col1, col2 = st.columns([1, 1])
+        msg_container = st.empty()
+
         with col1:
             if st.button("← Keep Chatting", use_container_width=True, key="cancel_end"):
                 st.session_state.show_end_dialog = False
@@ -183,12 +176,11 @@ def main():
         with col2:
             if st.button("⏹️ Yes, End Session", use_container_width=True, key="confirm_end"):
                 do_end_session()
-                st.success("✅ Session ended! Ready for a fresh start.")
+                msg_container.success("✅ Session ended! Ready for a fresh start.")
                 time.sleep(1.2)
                 st.rerun()
         st.stop()
 
-    # Render a welcome screen with quick-start prompts if chat is empty
     if not st.session_state.messages:
         st.markdown(
             """
@@ -204,33 +196,39 @@ def main():
                 </div>
             </div>
 
-            <div style="display:flex; justify-content:center; gap:1rem; flex-wrap:wrap;
-                        margin-bottom:3rem;">
-                <div style="background:var(--surface-color); border:1px solid var(--border-color);
-                            border-radius:10px; padding:0.6rem 1.1rem; font-size:0.85rem;
-                            color:var(--text-muted);">💡 Summarize this lecture</div>
-                <div style="background:var(--surface-color); border:1px solid var(--border-color);
-                            border-radius:10px; padding:0.6rem 1.1rem; font-size:0.85rem;
-                            color:var(--text-muted);">🃏 Create flashcards for deadlocks</div>
-                <div style="background:var(--surface-color); border:1px solid var(--border-color);
-                            border-radius:10px; padding:0.6rem 1.1rem; font-size:0.85rem;
-                            color:var(--text-muted);">📝 Revision notes for Chapter 5</div>
-                <div style="background:var(--surface-color); border:1px solid var(--border-color);
-                            border-radius:10px; padding:0.6rem 1.1rem; font-size:0.85rem;
-                            color:var(--text-muted);">🧪 Quiz me on routing algorithms</div>
+            <style>
+            .prompt-pill {
+                display: inline-block;
+                padding: 0.45rem 1rem;
+                border-radius: 999px;
+                font-size: 0.85rem;
+                font-weight: 500;
+                margin: 0.2rem;
+                transition: all 0.2s ease;
+            }
+            .prompt-pill:hover { opacity: 0.8; }
+            .pill-summary { background: rgba(250, 204, 21, 0.15); color: #FACC15; border: 1px solid rgba(250, 204, 21, 0.3); }
+            .pill-flashcards { background: rgba(192, 132, 252, 0.15); color: #C084FC; border: 1px solid rgba(192, 132, 252, 0.3); }
+            .pill-notes { background: rgba(96, 165, 250, 0.15); color: #60A5FA; border: 1px solid rgba(96, 165, 250, 0.3); }
+            .pill-quiz { background: rgba(74, 222, 128, 0.15); color: #4ADE80; border: 1px solid rgba(74, 222, 128, 0.3); }
+            </style>
+            
+            <div style="display:flex; justify-content:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:3rem;">
+                <span class="prompt-pill pill-summary">💡 Summarize this lecture</span>
+                <span class="prompt-pill pill-flashcards">🃏 Create flashcards for deadlocks</span>
+                <span class="prompt-pill pill-notes">📝 Revision notes for Chapter 5</span>
+                <span class="prompt-pill pill-quiz">🧪 Quiz me on routing algorithms</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    # Display previous messages in the conversation
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             if message.get("sources"):
                 st.caption(f"📎 Sources: {', '.join(message['sources'])}")
 
-    # Input field and submit logic for new questions
     if prompt := st.chat_input("Ask a question, request a summary, or create flashcards…"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -257,7 +255,16 @@ def main():
                     answer = result.get("answer", "No answer received.")
                     sources = result.get("sources", [])
 
-                    placeholder.markdown(answer)
+                    placeholder.empty()
+
+                    def stream_text(text):
+                        chunk_size = 3
+                        for i in range(0, len(text), chunk_size):
+                            yield text[i:i+chunk_size]
+                            time.sleep(0.015)
+
+                    st.write_stream(stream_text(answer))
+
                     if sources:
                         st.caption(f"📎 Sources: {', '.join(sources)}")
 

@@ -1,9 +1,9 @@
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .api import upload, chat, history, health
 from .database.connection import init_db
-from .config.settings import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,10 +12,17 @@ logging.basicConfig(
 
 init_db()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logging.info("Hello! Starting up the AI Multimedia Knowledge Assistant API...")
+    yield
+    logging.info("Shutting down the API. See you next time!")
+
 app = FastAPI(
     title="AI Multimedia Knowledge Assistant",
     description="Your friendly RAG assistant for multimedia content. Upload files and chat with them!",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -30,12 +37,4 @@ app.include_router(health.router)
 app.include_router(upload.router)
 app.include_router(chat.router)
 app.include_router(history.router)
-
-@app.on_event("startup")
-async def startup_event():
-    logging.info("Hello! Starting up the AI Multimedia Knowledge Assistant API...")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logging.info("Shutting down the API. See you next time!")
+

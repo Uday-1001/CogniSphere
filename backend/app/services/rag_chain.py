@@ -1,202 +1,136 @@
-import os
-from typing import Dict, Any, List, Optional, Tuple
-from langchain_core.runnables import RunnableLambda
+import logging
+import operator
+from typing import Dict, Any, List, Optional, TypedDict, Annotated
+from langgraph.graph import StateGraph, END
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
+from pydantic import SecretStr
 from .retrieval import retrieval_service
 from .embeddings import embedding_service
-from ..vectorstore.chroma import chroma_service
+from ..vectorstore.qdrant import qdrant_service
 from ..prompts.chat_prompt import chat_prompt
 from ..config.settings import settings
-import logging
-from pydantic import SecretStr
 
 logger = logging.getLogger(__name__)
 
-PROVIDER_DISPLAY_NAMES = {
-    "google": "Gemini (Google AI)",
-    "gemini": "Gemini (Google AI)",
-    "groq":   "Groq (Llama)",
-    "ollama": "Ollama (local model)",
+
+model_display = {
+    "gpt-oss-120b": "Groq (GPT-OSS 120B)",
+    "gpt-oss-20b":  "Groq (GPT-OSS 20B)",
 }
+
+Expanded_query_prompt = ChatPromptTemplate.from_template(
+    "You are an AI assistant helping to improve search results. "
+    "Generate exactly 2 alternate search queries that are similar in meaning to the original query. "
+    "These queries should use different keywords or phrasing to find relevant documents. "
+    "Return ONLY the alternate queries, one per line, without numbers, bullet points, or any other text.\n\n"
+    "Original query: {query}"
+)
+
+def detect_format_instruction(query: str) -> str:
+    q = query.lower()
+    if "summary" in q or "summarize" in q:
+        return "Use the SUMMARY Response Format."
+    elif "revision notes" in q or "notes" in q:
+        return "Use the REVISION NOTES Response Format."
+    elif "flashcard" in q:
+        return "Use the FLASHCARDS Response Format."
+    elif "quiz" in q or "mcq" in q:
+        return "Use the QUIZ Response Format."
+    elif "compare" in q or "difference" in q:
+        return "Use the COMPARISON Response Format."
+    elif "define" in q or "definition" in q:
+        return "Use the DEFINITIONS Response Format."
+    elif "algorithm" in q or "procedure" in q or "steps" in q:
+        return "Use the ALGORITHMS / PROCEDURES Response Format."
+    elif "code" in q or "program" in q:
+        return "Use the PROGRAMMING QUESTIONS Response Format."
+    return "Use the GENERAL RESPONSE FORMAT."
+
+
+class RAGState(TypedDict, total=False):
+    query: str
+    file_id: Optional[int]
+    expanded_queries: List[str]
+    documents: List[Any]
+    context: str
+    format_instruction: str
+
+    providers_to_try: List[str]
+    provider_used: Optional[str]
+    errors: Annotated[List[str], operator.add]
+
+    answer: str
+    sources: List[str]
+    timestamps: List[dict]
 
 
 class RAGChainService:
-    # Manages RAG (Retrieval-Augmented Generation) with fallback across LLM providers
-
-    _instance = None
-    _chain = None
+    _instance: Optional["RAGChainService"] = None
+    _graph: Optional[Any] = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def _build_gemini(self) -> Any:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        api_key = (
-            settings.GOOGLE_API_KEY
-            or os.environ.get("GOOGLE_API_KEY")
-            or os.environ.get("GEMINI_API_KEY")
-        )
-        if not api_key:
-            raise ValueError("No Google/Gemini API key found. Set GOOGLE_API_KEY in your .env file.")
-        return ChatGoogleGenerativeAI(
-            model=settings.LLM_MODEL,
-            api_key=api_key,
-            temperature=0.1,
-        )
-
-    def _build_groq(self) -> Any:
-        if not settings.GROQ_API_KEY:
-            raise ValueError("No Groq API key found. Set GROQ_API_KEY in your .env file.")
+    # Create the Models
+    def create_model(self, model_name: str) -> ChatGroq:
         return ChatGroq(
+            model=model_name,
             api_key=SecretStr(settings.GROQ_API_KEY),
-            model="llama-3.3-70b-versatile",
-            temperature=0.1,
+            temperature=0.2,
+            max_retries=0,
+            max_tokens=2500
         )
 
-    def _build_ollama(self) -> Any:
-        return ChatOllama(
-            base_url=settings.OLLAMA_BASE_URL,
-            model=settings.OLLAMA_FALLBACK_MODEL,
-            temperature=0.1,
-        )
-
-    def _get_llm(self):
-        provider = settings.LLM_PROVIDER
-        if provider in ["google", "gemini"]:
-            return self._build_gemini()
-        elif provider == "groq":
-            return self._build_groq()
-        elif provider == "ollama":
-            return self._build_ollama()
-        else:
-            raise ValueError(
-                f"'{provider}' is not a recognised LLM provider. "
-                "Please set LLM_PROVIDER to 'google', 'groq', or 'ollama' in your .env file."
-            )
-
-    def _get_fallback_providers(self) -> List[str]:
-        primary = settings.LLM_PROVIDER
-        candidates = []
-
-        if primary != "groq" and settings.GROQ_API_KEY:
-            candidates.append("groq")
-
-        if primary != "ollama":
-            candidates.append("ollama")
-
-        return candidates
-
-    def _build_llm_for_provider(self, provider: str) -> Any:
-        if provider in ["google", "gemini"]:
-            return self._build_gemini()
-        elif provider == "groq":
-            return self._build_groq()
-        elif provider == "ollama":
-            return self._build_ollama()
+    def build_llm_for_provider(self, provider: str) -> Any:
+        if not settings.GROQ_API_KEY:
+            raise ValueError("GROQ_API_KEY not set.")
+        if provider == "gpt-oss-120b":
+            return self.create_model("openai/gpt-oss-120b")
+        elif provider == "gpt-oss-20b":
+            return self.create_model("openai/gpt-oss-20b")
         raise ValueError(f"Unknown provider: {provider}")
 
-    def _invoke_with_fallback(self, formatted_prompt: str) -> Tuple[str, str]:
-        primary = settings.LLM_PROVIDER
-        providers_to_try = [primary] + self._get_fallback_providers()
+    def get_fallback_providers(self) -> List[str]:
+        return ["gpt-oss-20b"] if settings.LLM_PROVIDER == "gpt-oss-120b" else []
 
-        last_error = None
-        for provider in providers_to_try:
-            display_name = PROVIDER_DISPLAY_NAMES.get(provider, provider)
-            try:
-                logger.info("Sending request to %s...", display_name)
-                llm = self._build_llm_for_provider(provider)
-                response = llm.invoke(formatted_prompt)
-                
-                content = response.content
-                if isinstance(content, list):
-                    text_parts = []
-                    for part in content:
-                        if isinstance(part, str):
-                            text_parts.append(part)
-                        elif isinstance(part, dict) and "text" in part:
-                            text_parts.append(part["text"])
-                    content = "".join(text_parts)
-
-                if provider != primary:
-                    logger.info(
-                        "Primary provider (%s) failed. Answer generated by fallback: %s.",
-                        PROVIDER_DISPLAY_NAMES.get(primary, primary),
-                        display_name,
-                    )
-                return content, provider
-            except Exception as provider_error:
-                last_error = provider_error
-                logger.warning(
-                    "%s could not answer this time (%s). Trying next option...",
-                    display_name,
-                    provider_error,
-                )
-
-        raise RuntimeError(
-            "Our AI assistant is taking a short break right now and couldn't generate a response. "
-            "This usually happens when there's a connectivity issue or an API limit has been reached. "
-            "Please wait a moment and try again — we'll be back up shortly!"
-        ) from last_error
-
-    def _get_format_instruction(self, query: str) -> str:
-        query_lower = query.lower()
-        if "summary" in query_lower or "summarize" in query_lower:
-            return "Use the SUMMARY Response Format."
-        elif "revision notes" in query_lower or "notes" in query_lower:
-            return "Use the REVISION NOTES Response Format."
-        elif "flashcard" in query_lower:
-            return "Use the FLASHCARDS Response Format."
-        elif "quiz" in query_lower or "mcq" in query_lower:
-            return "Use the QUIZ Response Format."
-        elif "compare" in query_lower or "difference" in query_lower:
-            return "Use the COMPARISON Response Format."
-        elif "define" in query_lower or "definition" in query_lower:
-            return "Use the DEFINITIONS Response Format."
-        elif "algorithm" in query_lower or "procedure" in query_lower or "steps" in query_lower:
-            return "Use the ALGORITHMS / PROCEDURES Response Format."
-        elif "code" in query_lower or "program" in query_lower:
-            return "Use the PROGRAMMING QUESTIONS Response Format."
-        else:
-            return "Use the GENERAL RESPONSE FORMAT."
-
-    def _expand_query(self, query: str) -> List[str]:
-        prompt = (
-            "You are an AI assistant helping to improve search results. "
-            "Generate exactly 2 alternate search queries that are similar in meaning to the original query. "
-            "These queries should use different keywords or phrasing to find relevant documents. "
-            "Return ONLY the alternate queries, one per line, without numbers, bullet points, or any other text.\n\n"
-            f"Original query: {query}"
-        )
+    #Expand the Query for vaguelessness
+    def expand_query_node(self, state: RAGState) -> Dict[str, Any]:
+        query = state["query"]
+        alternates: List[str] = []
         try:
-            content, _ = self._invoke_with_fallback(prompt)
-            alternates = [q.strip() for q in content.split('\n') if q.strip()]
-            alternates = [q.replace("- ", "").replace("* ", "") for q in alternates]
-            alternates = [q for q in alternates if q][:2]
-            return [query] + alternates
+            llm = self.build_llm_for_provider(settings.LLM_PROVIDER)
+            expand_chain = Expanded_query_prompt | llm | StrOutputParser()
+            content = expand_chain.invoke({"query": query})
+            alts = [q.strip().lstrip("- *") for q in content.split("\n") if q.strip()]
+            alternates = [q for q in alts if q][:2]
         except Exception as e:
             logger.warning("Query expansion failed: %s", e)
-            return [query]
 
-    def _get_documents(self, query: str, number_of_results: int = 20, filter_by_file_id: Optional[int] = None) -> List[Any]:
-        queries = self._expand_query(query)
-        logger.info("Expanded queries for retrieval: %s", queries)
-        
+        expanded_queries = [query] + alternates
+        logger.info("Expanded queries for retrieval: %s", expanded_queries)
+        return {"expanded_queries": expanded_queries}
+
+    # Retrieve Node Of Graph
+    def retrieve_node(self, state: RAGState) -> Dict[str, Any]:
+        queries = state.get("expanded_queries") or [state["query"]]
+        file_id: Optional[int] = state.get("file_id")
+        number_of_results = 10
+
         results_per_query = []
         for q in queries:
             docs = retrieval_service.retrieve_documents(
-                q, 
-                number_of_results=number_of_results, 
-                filter_by_file_id=filter_by_file_id
+                q,
+                number_of_results=number_of_results,
+                filter_by_file_id=file_id,
             )
             results_per_query.append(docs)
-            
-        merged_docs = []
-        seen_contents = set()
-        
+
+        merged_docs: List[Any] = []
+        seen_contents: set = set()
         max_docs = max((len(docs) for docs in results_per_query), default=0)
         for i in range(max_docs):
             for docs in results_per_query:
@@ -205,106 +139,168 @@ class RAGChainService:
                     if doc.page_content not in seen_contents:
                         seen_contents.add(doc.page_content)
                         merged_docs.append(doc)
-                        
-        return merged_docs[:number_of_results]
 
-    def _format_docs(self, documents: List) -> str:
+        documents = merged_docs[:number_of_results]
+        documents.sort(key=lambda d: d.metadata.get("chunk_number", 0))
+
         formatted = []
         for document in documents:
             source = document.metadata.get("filename", "Unknown")
             source_type = document.metadata.get("source_type", "document")
-
             metadata_str = f"Document:\n{source}\n"
 
             if source_type in ["video", "audio"]:
-                timestamp_start = document.metadata.get("timestamp_start")
-                timestamp_end = document.metadata.get("timestamp_end")
-                if timestamp_start and timestamp_end:
-                    metadata_str += f"\nTimestamp:\n{timestamp_start}s - {timestamp_end}s\n"
+                ts_start = document.metadata.get("timestamp_start")
+                ts_end = document.metadata.get("timestamp_end")
+                if ts_start and ts_end:
+                    metadata_str += f"\nTimestamp:\n{ts_start}s - {ts_end}s\n"
 
             formatted.append(f"{metadata_str}\nContent:\n{document.page_content}")
 
-        return "\n\n-------------------------------------\n\n".join(formatted)
+        context = "\n\n-------------------------------------\n\n".join(formatted)
 
-
-    def _build_chain(self):
-        # Setup the LangChain pipeline to retrieve context and prompt the LLM
-        language_model = self._get_llm()
-
-        def retrieve_and_format(query: str) -> dict:
-            if isinstance(query, dict):
-                query_text = query.get("question", query.get("query", ""))
-            else:
-                query_text = query
-
-            retrieved_documents = self._get_documents(query_text, number_of_results=20)
-            context = self._format_docs(retrieved_documents)
-
-            sources = list(set(
-                document.metadata.get("filename", "Unknown")
-                for document in retrieved_documents
-            ))
-            timestamps = [
-                {
-                    "filename": document.metadata.get("filename"),
-                    "start": document.metadata.get("timestamp_start"),
-                    "end": document.metadata.get("timestamp_end"),
-                }
-                for document in retrieved_documents
-                if document.metadata.get("timestamp_start") and document.metadata.get("timestamp_end")
-            ]
-
-            return {
-                "context": context,
-                "question": query_text,
-                "format_instruction": self._get_format_instruction(query_text),
-                "sources": sources,
-                "timestamps": timestamps,
-            }
-
-        self._chain = (
-            RunnableLambda(retrieve_and_format)
-            | chat_prompt
-            | language_model
-            | StrOutputParser()
-        )
-
-    def initialize(self):
-        if not chroma_service.vectorstore:
-            embedding_service.get_embeddings()
-            chroma_service.initialize(embedding_service.get_embeddings())
-        self._build_chain()
-
-
-    def invoke(self, query: str, file_id: Optional[int] = None) -> Dict[str, Any]:
-        if self._chain is None:
-            self.initialize()
-
-        retrieved_documents = self._get_documents(query, number_of_results=20, filter_by_file_id=file_id)
-        context = self._format_docs(retrieved_documents)
-
-        sources = list(set(
-            document.metadata.get("filename", "Unknown")
-            for document in retrieved_documents
-        ))
+        sources = list(set(doc.metadata.get("filename", "Unknown") for doc in documents))
         timestamps = [
             {
-                "filename": document.metadata.get("filename"),
-                "start": document.metadata.get("timestamp_start"),
-                "end": document.metadata.get("timestamp_end"),
+                "filename": doc.metadata.get("filename"),
+                "start": doc.metadata.get("timestamp_start"),
+                "end": doc.metadata.get("timestamp_end"),
             }
-            for document in retrieved_documents
-            if document.metadata.get("timestamp_start") and document.metadata.get("timestamp_end")
+            for doc in documents
+            if doc.metadata.get("timestamp_start") and doc.metadata.get("timestamp_end")
         ]
 
-        format_instruction = self._get_format_instruction(query)
-        formatted_prompt = chat_prompt.format(
-            context=context,
-            question=query,
-            format_instruction=format_instruction,
+        format_instruction: str = detect_format_instruction(state["query"])
+
+        return {
+            "documents": documents,
+            "context": context,
+            "sources": sources,
+            "timestamps": timestamps,
+            "format_instruction": format_instruction,
+        }
+
+    # Generate Node Of Graph
+    def generate_node(self, state: RAGState) -> Dict[str, Any]:
+        providers_to_try: List[str] = state.get("providers_to_try") or []
+
+        if not providers_to_try:
+            return {
+                "provider_used": None,
+                "answer": (
+                    "I'm sorry, I wasn't able to generate a response right now. "
+                    "All available AI providers are temporarily unavailable. "
+                    "Please check your API key and try again in a moment."
+                ),
+            }
+
+        provider = providers_to_try[0]
+        display_name = model_display.get(provider, provider)
+
+        try:
+            logger.info("Sending request to %s...", display_name)
+            llm = self.build_llm_for_provider(provider)
+            generation_chain = chat_prompt | llm | StrOutputParser()
+            content = generation_chain.invoke({
+                "context": state.get("context", ""),
+                "question": state["query"],
+                "format_instruction": state.get("format_instruction", "Use the GENERAL RESPONSE FORMAT."),
+            })
+
+            if not content or not content.strip():
+                raise ValueError("Model returned an empty response.")
+
+            if provider != settings.LLM_PROVIDER:
+                logger.info(
+                    "Primary provider (%s) failed. Answer generated by fallback: %s.",
+                    model_display.get(settings.LLM_PROVIDER, settings.LLM_PROVIDER),
+                    display_name,
+                )
+
+            return {
+                "answer": content,
+                "provider_used": provider,
+                "providers_to_try": providers_to_try[1:],
+            }
+
+        except Exception as e:
+            logger.warning(
+                "%s could not answer this time (%s). Trying next option...", display_name, e
+            )
+            return {
+                "errors": [str(e)],
+                "providers_to_try": providers_to_try[1:],
+                "provider_used": None,
+            }
+
+    # Check The Success of Model Availability
+    def check_generation_success(self, state: RAGState) -> str:
+        if state.get("provider_used"):
+            return "success"
+        remaining = state.get("providers_to_try") or []
+        return "retry" if remaining else "failed"
+
+    # Building the Whole Graph
+    def _build_graph(self):
+        """Compiles the LangGraph StateGraph for the RAG pipeline."""
+        workflow: StateGraph = StateGraph(RAGState)
+
+        workflow.add_node("expand_query", self.expand_query_node)
+        workflow.add_node("retrieve", self.retrieve_node)
+        workflow.add_node("generate", self.generate_node)
+
+        workflow.set_entry_point("expand_query")
+        workflow.add_edge("expand_query", "retrieve")
+        workflow.add_edge("retrieve", "generate")
+
+        workflow.add_conditional_edges(
+            "generate",
+            self.check_generation_success,
+            {
+                "success": END,
+                "retry": "generate",
+                "failed": END,
+            },
         )
 
-        answer, provider_used = self._invoke_with_fallback(formatted_prompt)
+        self._graph = workflow.compile()
+
+    # Intialization of Graph
+    def initialize(self):
+        if not qdrant_service.vectorstore:
+            qdrant_service.initialize(embedding_service.get_embeddings())
+        if self._graph is None:
+            self._build_graph()
+
+    # Invoke the Graph
+    def invoke(self, query: str, file_id: Optional[int] = None) -> Dict[str, Any]:
+        if self._graph is None:
+            self.initialize()
+        assert self._graph is not None, "Graph failed to initialize"
+
+        primary = settings.LLM_PROVIDER
+        providers = [primary] + self.get_fallback_providers()
+
+        initial_state: RAGState = {
+            "query": query,
+            "file_id": file_id,
+            "providers_to_try": providers,
+            "errors": [],
+        }
+
+        final_state: Dict[str, Any] = self._graph.invoke(initial_state)
+
+        if not final_state.get("provider_used"):
+            return {
+                "answer": final_state.get("answer", "I'm sorry, I couldn't generate a response. Please try again."),
+                "sources": [],
+                "timestamps": [],
+                "context_used": "",
+                "provider_used": None,
+            }
+
+        provider_used: str = final_state["provider_used"]
+        answer: str = final_state.get("answer", "")
 
         provider_note = ""
         if provider_used != settings.LLM_PROVIDER:
@@ -317,9 +313,9 @@ class RAGChainService:
 
         return {
             "answer": answer + provider_note,
-            "sources": sources,
-            "timestamps": timestamps,
-            "context_used": context[:500],
+            "sources": final_state.get("sources", []),
+            "timestamps": final_state.get("timestamps", []),
+            "context_used": (final_state.get("context") or "")[:500],
             "provider_used": provider_used,
         }
 

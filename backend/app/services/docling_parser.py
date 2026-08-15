@@ -1,27 +1,21 @@
-# Parse documents like PDFs and Word files into Markdown with LangChain support
-
 from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import List, Optional
-
 from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
-# Supported formats this parser handles natively
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx"}
 
 
-def _build_docling_converter():
-    # Lazily build the document converter to avoid early ImportErrors
+def build_docling_converter():
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions
 
     pipeline_options = PdfPipelineOptions(
-        do_ocr=False,           # OCR handled by our dedicated PaddleOCR pipeline
+        do_ocr=False,
         do_table_structure=True,
         generate_page_images=False,
     )
@@ -34,8 +28,7 @@ def _build_docling_converter():
     return converter
 
 
-def _extract_heading(markdown_text: str) -> Optional[str]:
-    # Extract the first heading from markdown
+def extract_heading(markdown_text: str) -> Optional[str]:
     for line in markdown_text.splitlines():
         stripped = line.lstrip("#").strip()
         if line.startswith("#") and stripped:
@@ -44,7 +37,6 @@ def _extract_heading(markdown_text: str) -> Optional[str]:
 
 
 def parse_with_docling(file_path: str) -> List[Document]:
-    # Break down the document page by page and extract text with metadata
     path = Path(file_path)
     ext = path.suffix.lower()
 
@@ -64,7 +56,7 @@ def parse_with_docling(file_path: str) -> List[Document]:
     logger.info("Docling: parsing '%s' (%s)", path.name, ext)
 
     try:
-        converter = _build_docling_converter()
+        converter = build_docling_converter()
         result = converter.convert(file_path)
     except ImportError:
         raise
@@ -73,11 +65,9 @@ def parse_with_docling(file_path: str) -> List[Document]:
             f"Docling failed to parse '{path.name}': {exc}"
         ) from exc
 
-    # Try exporting page by page for better metadata
     documents: List[Document] = []
 
     try:
-        # Attempt page-level export for richer page_number metadata
         pages = list(result.document.pages.values()) if hasattr(result.document, "pages") else []
     except Exception:
         pages = []
@@ -85,7 +75,6 @@ def parse_with_docling(file_path: str) -> List[Document]:
     if pages:
         for page in pages:
             try:
-                # Collect all text elements belonging to this page
                 page_chunks = []
                 for item, _ in result.document.iterate_items():
                     item_prov = getattr(item, "prov", [])
@@ -108,7 +97,7 @@ def parse_with_docling(file_path: str) -> List[Document]:
                     metadata={
                         "source":        file_path,
                         "page_number":   page.page_no,
-                        "section":       _extract_heading(page_text),
+                        "section":       extract_heading(page_text),
                         "parser_used":   "docling",
                         "is_ocr":        False,
                         "document_type": document_type,
@@ -120,7 +109,6 @@ def parse_with_docling(file_path: str) -> List[Document]:
                     getattr(page, "page_no", "?"), path.name, page_exc,
                 )
 
-    # Fallback if page-level export fails
     if not documents:
         logger.debug(
             "Docling: page-level extraction yielded nothing for '%s' — "
@@ -143,7 +131,7 @@ def parse_with_docling(file_path: str) -> List[Document]:
             metadata={
                 "source":        file_path,
                 "page_number":   1,
-                "section":       _extract_heading(full_markdown),
+                "section":       extract_heading(full_markdown),
                 "parser_used":   "docling",
                 "is_ocr":        False,
                 "document_type": document_type,

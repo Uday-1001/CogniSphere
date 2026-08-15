@@ -114,42 +114,196 @@ def apply_custom_theme():
         line-height: 1.5;
     }}
 
-    /* Feature Cards */
-    .feature-card {{
+    /* Step Cards for Instructions */
+    .step-card {{
         background-color: var(--surface-color);
         border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 1.5rem;
-        height: 100%;
+        border-radius: 16px;
+        padding: 2rem;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        text-align: center;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        align-items: flex-start;
+        text-align: left;
+        transition: all 0.4s ease;
+        position: relative;
+        overflow: hidden;
+        z-index: 1;
     }}
     
-    .feature-card:hover {{
-        transform: translateY(-4px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        border-color: rgba(255,255,255,0.15);
+    .step-card::before {{
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 0%;
+        background: var(--step-color);
+        z-index: -1;
+        transition: height 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
     }}
     
-    .feature-icon {{
-        font-size: 2rem;
-        margin-bottom: 1rem;
+    .step-card:hover::before {{
+        height: 100%;
     }}
     
-    .feature-title {{
+    .step-card:hover {{
+        transform: translateY(-8px);
+        box-shadow: 0 15px 30px -5px var(--step-color);
+        border-color: transparent;
+    }}
+    
+    .step-number {{
+        font-size: 3.5rem; 
+        font-weight: 900; 
+        margin-bottom: 0.75rem; 
+        opacity: 0.85; 
+        line-height: 1;
+        transition: color 0.4s ease;
+    }}
+    
+    .step-title {{
         color: var(--text-main);
-        font-weight: 600;
-        font-size: 1.1rem;
+        font-weight: 700;
+        font-size: 1.3rem;
         margin-bottom: 0.5rem;
+        transition: color 0.4s ease;
+    }}
+    
+    .step-desc {{
+        color: var(--text-muted);
+        font-size: 0.95rem;
+        transition: color 0.4s ease;
+    }}
+    
+    .step-card:hover .step-number,
+    .step-card:hover .step-title,
+    .step-card:hover .step-desc {{
+        color: #ffffff !important;
     }}
     
     .feature-desc {{
         color: var(--text-muted);
         font-size: 0.9rem;
         line-height: 1.4;
+    }}
+
+    /* Timeline Cards for Home Page */
+    .timeline-card {{
+        position: relative;
+        background: linear-gradient(145deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 24px;
+        padding: 2.5rem 2rem;
+        overflow: hidden;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(12px);
+        margin-bottom: 1rem;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }}
+    
+    .timeline-card:hover {{
+        transform: translateY(-8px);
+        border-color: var(--timeline-color);
+        box-shadow: 0 10px 40px -10px var(--timeline-color);
+    }}
+    
+    .timeline-bg-num {{
+        position: absolute;
+        right: -10px;
+        bottom: -20px;
+        font-size: 8rem;
+        font-weight: 900;
+        color: var(--timeline-color);
+        opacity: 0.05;
+        line-height: 1;
+        pointer-events: none;
+        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 0;
+    }}
+    
+    .timeline-card:hover .timeline-bg-num {{
+        transform: scale(1.15) rotate(-5deg);
+        opacity: 0.15;
+    }}
+    
+    .timeline-icon {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 55px;
+        height: 55px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--timeline-color);
+        font-size: 1.8rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid rgba(255,255,255,0.05);
+        z-index: 1;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }}
+    
+    .timeline-title {{
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: var(--text-main);
+        margin-bottom: 0.75rem;
+        z-index: 1;
+    }}
+    
+    .timeline-desc {{
+        color: var(--text-muted);
+        font-size: 1rem;
+        line-height: 1.6;
+        z-index: 1;
+        flex-grow: 1;
+    }}
+
+    /* Flip Cards */
+    .flip-card {{
+        background-color: transparent;
+        height: 210px;
+        perspective: 1000px;
+        margin-bottom: 1rem;
+    }}
+    
+    .flip-card-inner {{
+        position: relative;
+        width: 100%;
+        height: 100%;
+        text-align: center;
+        transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        transform-style: preserve-3d;
+    }}
+    
+    .flip-card:hover .flip-card-inner {{
+        transform: rotateY(180deg);
+    }}
+    
+    .flip-card-front, .flip-card-back {{
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        backface-visibility: hidden;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+    }}
+    
+    .flip-card-front {{
+        background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%), var(--surface-color);
+        border: 1px solid var(--border-color);
+        box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }}
+    
+    .flip-card-back {{
+        background-color: var(--surface-color);
+        transform: rotateY(180deg);
+        box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.2);
     }}
 
     /* Mock Chat Input Wrapper */
@@ -299,6 +453,7 @@ def apply_custom_theme():
         0%, 100% {{ opacity: 1; box-shadow: 0 0 6px #F87171; }}
         50%        {{ opacity: 0.35; box-shadow: 0 0 2px #F87171; }}
     }}
+
     </style>
     """
 
@@ -314,7 +469,7 @@ def apply_custom_theme():
             backend_online = False
 
     dot_class = "status-dot-online" if backend_online else "status-dot-offline"
-    status_label = "All Ready 👍" if backend_online else "Backend Offline"
+    status_label = "Server Active 🔆" if backend_online else "Server Resting 😴"
     status_bar_html = f"""
     <div class="backend-status-bar">
         <span class="status-dot {dot_class}"></span>

@@ -1,7 +1,6 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from contextlib import contextmanager
 from .models import Base
 from ..config.settings import settings
 
@@ -16,10 +15,8 @@ else:
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
 def init_db():
     Base.metadata.create_all(bind=engine)
-
 
 def get_db():
     db = SessionLocal()
