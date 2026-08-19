@@ -9,40 +9,56 @@ def apply_custom_theme():
     if st.session_state.theme == 'dark':
         css_vars = """
         :root {
-            --bg-color: #0F172A;
-            --surface-color: #1E293B;
+            --bg-color: #0B1120;
+            --surface-color: rgba(30, 41, 59, 0.6);
+            --surface-color-solid: #1E293B;
             --accent-color: #3B82F6; 
             --accent-hover: #60A5FA;
             --border-color: rgba(255, 255, 255, 0.08);
             --text-main: #F8FAFC;
             --text-muted: #94A3B8;
+            --glow-color: rgba(59, 130, 246, 0.15);
         }
         """
     else:
         css_vars = """
         :root {
             --bg-color: #F8FAFC;
-            --surface-color: #FFFFFF;
+            --surface-color: rgba(255, 255, 255, 0.7);
+            --surface-color-solid: #FFFFFF;
             --accent-color: #2563EB; 
             --accent-hover: #1D4ED8;
-            --border-color: #E2E8F0;
+            --border-color: rgba(15, 23, 42, 0.08);
             --text-main: #0F172A;
             --text-muted: #64748B;
+            --glow-color: rgba(37, 99, 235, 0.1);
         }
         """
 
     custom_css = f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
     {css_vars}
 
-    /* Base Streamlit App Background */
+    /* Base Streamlit App Background & Typography */
+    html, body, [class*="css"] {{
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }}
+    
     .stApp {{
         background-color: var(--bg-color) !important;
+        background-image: 
+            radial-gradient(at 0% 0%, var(--glow-color) 0px, transparent 50%),
+            radial-gradient(at 100% 0%, rgba(192, 132, 252, 0.1) 0px, transparent 50%) !important;
+        background-attachment: fixed !important;
     }}
 
     /* Sidebar UI */
     [data-testid="stSidebar"] {{
-        background-color: var(--bg-color) !important;
+        background-color: var(--surface-color) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
         border-right: 1px solid var(--border-color) !important;
     }}
 
@@ -108,26 +124,29 @@ def apply_custom_theme():
     .hero-subtitle {{
         text-align: center;
         color: var(--text-muted);
-        font-size: 1.1rem;
+        font-size: 1.15rem;
         max-width: 600px;
         margin: 0 auto 3rem auto;
-        line-height: 1.5;
+        line-height: 1.6;
+        font-weight: 300;
     }}
 
     /* Step Cards for Instructions */
     .step-card {{
-        background-color: var(--surface-color);
+        background: var(--surface-color);
+        backdrop-filter: blur(12px);
         border: 1px solid var(--border-color);
-        border-radius: 16px;
+        border-radius: 20px;
         padding: 2rem;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         text-align: left;
-        transition: all 0.4s ease;
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         position: relative;
         overflow: hidden;
         z-index: 1;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
     }}
     
     .step-card::before {{
@@ -137,9 +156,10 @@ def apply_custom_theme():
         left: 0;
         width: 100%;
         height: 0%;
-        background: var(--step-color);
+        background: linear-gradient(180deg, transparent, var(--step-color));
+        opacity: 0.15;
         z-index: -1;
-        transition: height 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+        transition: height 0.5s cubic-bezier(0.165, 0.84, 0.44, 1);
     }}
     
     .step-card:hover::before {{
@@ -147,9 +167,9 @@ def apply_custom_theme():
     }}
     
     .step-card:hover {{
-        transform: translateY(-8px);
-        box-shadow: 0 15px 30px -5px var(--step-color);
-        border-color: transparent;
+        transform: translateY(-8px) scale(1.02);
+        box-shadow: 0 20px 40px -10px var(--step-color);
+        border-color: var(--step-color);
     }}
     
     .step-number {{
@@ -452,6 +472,25 @@ def apply_custom_theme():
     @keyframes blink-red {{
         0%, 100% {{ opacity: 1; box-shadow: 0 0 6px #F87171; }}
         50%        {{ opacity: 0.35; box-shadow: 0 0 2px #F87171; }}
+    }}
+    
+    /* Primary Button Global Styling */
+    [data-testid="baseButton-primary"] {{
+        background: linear-gradient(135deg, #3B82F6, #8B5CF6) !important;
+        border: none !important;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
+        transition: all 0.3s ease !important;
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.02em !important;
+    }}
+    [data-testid="baseButton-primary"]:hover {{
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.5) !important;
+        background: linear-gradient(135deg, #60A5FA, #A78BFA) !important;
+    }}
+    [data-testid="baseButton-primary"]:active {{
+        transform: translateY(1px) !important;
     }}
 
     </style>

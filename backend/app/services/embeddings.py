@@ -1,5 +1,5 @@
 from langchain_core.embeddings import Embeddings
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from ..config.settings import settings
 from typing import Optional
 
@@ -16,9 +16,10 @@ class EmbeddingService:
     # Generating the embeddings 
     def get_embeddings(self) -> Embeddings:
         if self._embeddings is None:
-            if settings.EMBEDDING_PROVIDER == "huggingface":
-                self._embeddings = HuggingFaceEmbeddings(
-                    model_name="BAAI/bge-base-en-v1.5"
+            if settings.EMBEDDING_PROVIDER == "google":
+                self._embeddings = GoogleGenerativeAIEmbeddings(
+                    model="models/gemini-embedding-2",
+                    google_api_key=settings.GOOGLE_API_KEY
                 )
             else:
                 raise ValueError(f"Unknown embedding provider: {settings.EMBEDDING_PROVIDER}")

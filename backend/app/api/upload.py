@@ -58,12 +58,13 @@ class IngestionState(TypedDict, total=False):
     error: Optional[str]
 
 
-def update_progress(file_id: int, current: int, total: int, message: str = "") -> None:
+def update_progress(file_id: int, current: int, total: int, message: str = "", is_indeterminate: bool = False) -> None:
     processing_progress[file_id] = {
         "current": current,
         "total": total,
         "status": "processing",
         "message": message,
+        "is_indeterminate": is_indeterminate,
     }
 
 
@@ -73,21 +74,21 @@ def transcribe_node(state: IngestionState) -> Dict[str, Any]:
 
     try:
         if file_type == "video":
-            update_progress(file_id, 0, 100, "🎬 Listening to video and creating transcript...")
+            update_progress(file_id, 0, 100, "🎬 Listening to video and creating transcript...", True)
             _, transcript_path, segments = transcription_service.transcribe_video(
                 state["file_path"], settings.TRANSCRIPT_DIR
             )
             return {"transcript_path": transcript_path, "segment_timestamps": segments}
 
         elif file_type == "audio":
-            update_progress(file_id, 0, 100, "🎧 Listening to audio and creating transcript...")
+            update_progress(file_id, 0, 100, "🎧 Listening to audio and creating transcript...", True)
             _, transcript_path, segments = transcription_service.transcribe_audio_file(
                 state["file_path"], settings.TRANSCRIPT_DIR
             )
             return {"transcript_path": transcript_path, "segment_timestamps": segments}
 
         else:
-            update_progress(file_id, 0, 100, "📄 Extracting text from document...")
+            update_progress(file_id, 0, 100, "📄 Extracting text from document...", True)
             return {}
 
     except Exception as exc:
@@ -99,7 +100,7 @@ def load_documents(state: IngestionState) -> Dict[str, Any]:
     file_id = state["file_id"]
 
     def progress_callback(current: int, total: int, msg: str = "") -> None:
-        update_progress(file_id, current, total, msg)
+        update_progress(file_id, current, total, msg, False)
 
     try:
         documents = ingestion_service.process_document(
@@ -140,11 +141,10 @@ def index_node(state: IngestionState) -> Dict[str, Any]:
         ids = [str(uuid.uuid4()) for _ in documents]
 
         if qdrant_service.vectorstore is None:
-            
             qdrant_service.initialize(embedding_service.get_embeddings())
             
         qdrant_service.add_documents(texts, metadatas, ids)
-        update_progress(file_id, 100, 100, "Done")
+        update_progress(file_id, 100, 100, "Done", False)
         return {}
 
     except Exception as exc:
@@ -186,6 +186,18 @@ def build_ingestion_graph():
 
 ingestion_graph = build_ingestion_graph()
 
+import threading
+import time
+
+def _simulate_progress(file_id: int):
+    while True:
+        progress = processing_progress.get(file_id)
+        if not progress or progress.get("status") != "processing":
+            break
+        if progress.get("is_indeterminate"):
+            if progress["current"] < 95:
+                progress["current"] += 1
+        time.sleep(0.5)
 
 def run_file_processing(file_id: int) -> None:
     db = SessionLocal()
@@ -200,6 +212,8 @@ def run_file_processing(file_id: int) -> None:
             "filename": str(record.original_filename),
             "file_type": str(record.file_type),
         }
+
+        threading.Thread(target=_simulate_progress, args=(file_id,), daemon=True).start()
 
         final_state: Dict[str, Any] = ingestion_graph.invoke(initial_state)
 

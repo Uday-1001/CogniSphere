@@ -16,10 +16,23 @@ ui_enhancer.apply_custom_theme()
 
 API_BASE_URL = "http://localhost:8000"
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 if "session_id" not in st.session_state:
     st.session_state.session_id = None
+    if "session_id" in st.query_params:
+        try:
+            st.session_state.session_id = int(st.query_params["session_id"])
+        except ValueError:
+            pass
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+    if st.session_state.session_id:
+        try:
+            hist_resp = requests.get(f"{API_BASE_URL}/chat/{st.session_state.session_id}/history", timeout=5)
+            if hist_resp.status_code == 200:
+                st.session_state.messages = hist_resp.json().get("messages", [])
+        except Exception:
+            pass
 if "file_id" not in st.session_state:
     st.session_state.file_id = None
 if "show_end_dialog" not in st.session_state:
@@ -36,6 +49,7 @@ def do_end_session():
             )
             if response.status_code == 200:
                 st.session_state.session_id = response.json().get("new_session_id")
+                st.query_params["session_id"] = str(st.session_state.session_id)
         except Exception:
             pass
     st.session_state.messages = []
@@ -170,11 +184,11 @@ def main():
         msg_container = st.empty()
 
         with col1:
-            if st.button("← Keep Chatting", use_container_width=True, key="cancel_end"):
+            if st.button("✨ Keep Chatting", use_container_width=True, key="cancel_end"):
                 st.session_state.show_end_dialog = False
                 st.rerun()
         with col2:
-            if st.button("⏹️ Yes, End Session", use_container_width=True, key="confirm_end"):
+            if st.button("⚠️ Yes, End Session", use_container_width=True, key="confirm_end"):
                 do_end_session()
                 msg_container.success("✅ Session ended! Ready for a fresh start.")
                 time.sleep(1.2)
@@ -269,6 +283,7 @@ def main():
                         st.caption(f"📎 Sources: {', '.join(sources)}")
 
                     st.session_state.session_id = result.get("session_id")
+                    st.query_params["session_id"] = str(st.session_state.session_id)
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": answer,

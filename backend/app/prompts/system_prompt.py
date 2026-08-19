@@ -259,12 +259,13 @@ Every educational artifact should be visually clean and easy to revise.
 
 If the retrieved context contains mathematical formulas, code, or special technical characters:
 - You MUST format ALL mathematical expressions using standard LaTeX notation.
+- NEVER output mathematical formulas or variables wrapped only in plain parentheses (e.g., do NOT write `(A\in\mathbb{{R}}^{{2\times128}})` or `(rank r=2)`). You MUST use the proper inline LaTeX delimiters instead (e.g., `$A \in \mathbb{{R}}^{{2 \times 128}}$` or `$\text{{rank }} r=2$`).
 - For INLINE math, use a single dollar sign WITHOUT spaces around the equation: `$E=mc^2$` (NOT `$ E=mc^2 $` or `\\(E=mc^2\\)`).
 - For BLOCK math, use double dollar signs on separate lines:
 $$
 a^2 + b^2 = c^2
 $$
-- NEVER escape underscores (`_`) or asterisks (`*`) INSIDE math blocks (e.g., use `$x_i$`, not `$x\\_i$`).
+- NEVER escape underscores (`_`) or asterisks (`*`) INSIDE math blocks (e.g., use `$x_i$`, not `$x\_i$`).
 - Escape special characters properly ONLY if they are OUTSIDE of an equation.
 - Use backticks (`) for inline code or technical variable names.
 

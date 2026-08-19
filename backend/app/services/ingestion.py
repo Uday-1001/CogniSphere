@@ -48,16 +48,29 @@ Markdown_headers = [
 ]
 
 
-def make_pymupdf_documents(file_path: str) -> List[Document]:
+def make_pymupdf_documents(file_path: str, progress_callback: Optional[Callable] = None) -> List[Document]:
     loader = PyMuPDFLoader(file_path)
-    docs = list(loader.lazy_load())
-    for doc in docs:
+    
+    import fitz
+    import time
+    doc = fitz.open(file_path)
+    total_pages = len(doc)
+    doc.close()
+    
+    docs = []
+    for i, doc in enumerate(loader.lazy_load()):
+        if progress_callback:
+            progress_callback(i + 1, total_pages, f"📄 Extracting page {i + 1} of {total_pages}...")
+            
+        time.sleep(0.5)  # SIMULATED SLOW EXTRACTION TO TEST REALTIME PROGRESS
+        
         raw_page = doc.metadata.pop("page", None)
         doc.metadata.setdefault("page_number", (raw_page + 1) if raw_page is not None else None)
         doc.metadata.setdefault("section",       None)
         doc.metadata["parser_used"]   = "pymupdf"
         doc.metadata["is_ocr"]        = False
         doc.metadata["document_type"] = "pdf_digital"
+        docs.append(doc)
     return docs
 
 
@@ -234,7 +247,7 @@ class IngestionService:
                 )
 
         logger.info("'%s' — using PyMuPDFLoader (fallback).", filename)
-        docs = make_pymupdf_documents(file_path)
+        docs = make_pymupdf_documents(file_path, progress_callback)
 
         total_text = " ".join(d.page_content for d in docs).strip()
         if len(total_text) < 100 and ocr_available and ocr_pipeline is not None:

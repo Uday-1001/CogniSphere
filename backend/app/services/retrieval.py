@@ -3,36 +3,31 @@ import logging
 from typing import List, Optional
 from langchain_core.documents import Document
 from langchain_classic.retrievers import ContextualCompressionRetriever
-from langchain_community.cross_encoders import HuggingFaceCrossEncoder
-from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
+from langchain_cohere import CohereRerank
 from ..vectorstore.qdrant import qdrant_service
 from ..config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
-cross_encoder_model = None
+reranker_client = None
 reranker_initialized = False
 
-
-def _get_cross_encoder() -> Optional[HuggingFaceCrossEncoder]:
-    global cross_encoder_model, reranker_initialized
-    if not reranker_initialized:
-        reranker_initialized = True
+def get_reranker(top_n: int = 4) -> Optional[CohereRerank]:
+    if settings.RERANKER_PROVIDER == "cohere" and settings.COHERE_API_KEY:
         try:
-            _reranker_name = settings.RERANKER_MODEL_NAME or "BAAI/bge-reranker-base"
-            cross_encoder_model = HuggingFaceCrossEncoder(
-                model_name=_reranker_name
+            return CohereRerank(
+                cohere_api_key=settings.COHERE_API_KEY,
+                model=settings.RERANKER_MODEL_NAME or "rerank-english-v3.0",
+                top_n=top_n
             )
-            logger.info("Cross-Encoder reranker loaded: %s", _reranker_name)
         except Exception as _reranker_err:
-            cross_encoder_model = None
             logger.warning(
-                "CrossEncoder reranker unavailable (%s). "
+                "Cohere reranker unavailable (%s). "
                 "Retrieval will use base retrieval without reranking.",
                 _reranker_err,
             )
-    return cross_encoder_model
+    return None
 
 
 class RetrievalService:
@@ -62,8 +57,8 @@ class RetrievalService:
         if vectorstore is None:
             raise RuntimeError("Qdrant vectorstore could not be initialized.")
 
-        cross_encoder = _get_cross_encoder()
-        candidate_k = search_k * 2 if cross_encoder is not None else search_k
+        reranker = get_reranker(top_n=search_k)
+        candidate_k = search_k * 2 if reranker is not None else search_k
 
         base_retriever = vectorstore.as_retriever(
             search_kwargs={
@@ -72,11 +67,7 @@ class RetrievalService:
             },
         )
 
-        if cross_encoder is not None:
-            reranker = CrossEncoderReranker(
-                model=cross_encoder,
-                top_n=search_k,
-            )
+        if reranker is not None:
             return ContextualCompressionRetriever(
                 base_compressor=reranker,
                 base_retriever=base_retriever,

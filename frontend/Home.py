@@ -89,14 +89,16 @@ def main():
         """
         <style>
         .hero-title-new {
-            font-size: 3.8rem;
-            font-weight: 800;
+            font-size: 4rem;
+            font-weight: 700;
             text-align: center;
-            margin-bottom: 1rem;
-            background: linear-gradient(135deg, #4ADE80, #3B82F6, #C084FC);
+            margin-bottom: 1.25rem;
+            letter-spacing: -0.02em;
+            background: linear-gradient(180deg, #FFFFFF 0%, #94A3B8 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            line-height: 1.2;
+            line-height: 1.1;
+            filter: drop-shadow(0 4px 15px rgba(255, 255, 255, 0.05));
         }
         .hero-subtitle-new {
             font-size: 1.25rem;

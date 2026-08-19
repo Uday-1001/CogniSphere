@@ -7,8 +7,8 @@ A production-ready Retrieval-Augmented Generation (RAG) assistant capable of und
 - **Multimedia Processing:** Upload and process videos (mp4, mov, mkv, avi, webm), audio (mp3, wav, m4a, flac), and documents (pdf, docx, pptx, txt).
 - **Intelligent PDF Handling:** Uses **Docling** as the primary parser for deep document understanding, with fallback to PyMuPDF and an advanced parallel **EasyOCR** pipeline for scanned/image-based documents.
 - **Audio/Video Transcription:** Automatic, high-quality transcription using Faster-Whisper.
-- **LLM Integration:** Inference powered by **Groq**, using `gpt-oss-120b` as primary and `gpt-oss-20b` as fallback for lightning-fast RAG responses.
-- **Advanced Hybrid Retrieval:** Combines sparse (BM25) and dense (Qdrant) vector search, augmented with **Multi-Query Expansion** and **CrossEncoder Reranking** for high-precision semantic retrieval.
+- **LLM Integration:** Inference powered by **Groq**, using `gpt-oss-120b` as primary and `gpt-oss-20b` as fallback for lightning-fast RAG responses. Orchestrated using **LangGraph**.
+- **Advanced Hybrid Retrieval:** Combines sparse (BM25) and dense (Qdrant) vector search, augmented with **Multi-Query Expansion** and **Cohere CrossEncoder Reranking** for high-precision semantic retrieval. Uses **Google Gemini Embeddings** for dense vectors.
 - **Modern UI:** A sleek, fully-featured dark-mode Streamlit frontend featuring a custom `ui_enhancer.py` with 3D flip cards, glassmorphism timeline steps, prompt pills, and real-time processing statistics.
 - **Rich Citations:** Natural language Q&A with exact source citations and timestamp references for multimedia.
 
@@ -57,13 +57,13 @@ flowchart TD
     end
     
     Chunking("✂️ RecursiveCharacter<br>TextSplitter<br>+ Metadata Enrichment")
-    Embed("🧠 Embedding Generation<br>(HuggingFace)")
+    Embed("🧠 Embedding Generation<br>(Google Gemini)")
     DB[("🗄️ Qdrant Vector Store")]
     
     subgraph "Retrieval Pipeline"
         MQE("🔍 Multi-Query Expansion")
         Hybrid("🔄 Hybrid Retriever<br>(BM25 + Qdrant)")
-        Rerank("🎯 CrossEncoder Reranker")
+        Rerank("🎯 Cohere Reranker")
     end
     
     subgraph "LangGraph RAG Workflow"
@@ -129,8 +129,11 @@ DATABASE_URL=sqlite:///./multimedia_assistant.db
 LLM_PROVIDER=gpt-oss-120b
 GROQ_API_KEY=your_groq_key
 
-# Embeddings
-EMBEDDING_PROVIDER=huggingface
+# Embeddings & Reranker
+EMBEDDING_PROVIDER=google
+GOOGLE_API_KEY=your_google_api_key
+RERANKER_PROVIDER=cohere
+COHERE_API_KEY=your_cohere_api_key
 
 # OCR Pipeline
 OCR_LANGUAGE=en

@@ -296,6 +296,7 @@ class RAGChainService:
                 "sources": [],
                 "timestamps": [],
                 "context_used": "",
+                "contexts": [],
                 "provider_used": None,
             }
 
@@ -311,11 +312,14 @@ class RAGChainService:
                 "The answer is just as accurate — you might not even notice the difference!_"
             )
 
+        contexts = [doc.page_content for doc in final_state.get("documents", [])]
+
         return {
             "answer": answer + provider_note,
             "sources": final_state.get("sources", []),
             "timestamps": final_state.get("timestamps", []),
             "context_used": (final_state.get("context") or "")[:500],
+            "contexts": contexts,
             "provider_used": provider_used,
         }
 

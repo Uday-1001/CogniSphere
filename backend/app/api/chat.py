@@ -6,6 +6,7 @@ from ..database.models import ChatSession, ChatMessage
 from ..services.rag_chain import rag_chain_service
 import uuid
 import logging
+import ast
 
 logger = logging.getLogger(__name__)
 
@@ -113,3 +114,38 @@ async def end_session(request: EndSessionRequest, db=Depends(get_db)):
         "message": "Session ended successfully.",
         "new_session_id": new_session.id
     }
+
+
+@router.get("/{session_id}/history")
+async def get_chat_history(session_id: int, db=Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at).all()
+    
+    history = []
+    for msg in messages:
+        sources = []
+        if msg.sources:
+            try:
+                sources = ast.literal_eval(msg.sources)
+            except Exception:
+                pass
+        
+        timestamps = []
+        if msg.timestamp_references:
+            try:
+                timestamps = ast.literal_eval(msg.timestamp_references)
+            except Exception:
+                pass
+                
+        history.append({
+            "role": msg.role,
+            "content": msg.content,
+            "sources": sources,
+            "timestamps": timestamps
+        })
+        
+    return {"messages": history}
+

@@ -78,33 +78,58 @@ def main():
         <style>
         .format-pill {
             display: inline-block;
-            padding: 0.25rem 0.65rem;
-            border-radius: 999px;
+            padding: 0.35rem 0.8rem;
+            border-radius: 12px;
             font-size: 0.75rem;
-            font-weight: 600;
-            margin: 0.2rem;
+            font-weight: 700;
+            margin: 0.25rem 0.2rem;
+            letter-spacing: 0.03em;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(8px);
+            cursor: default;
         }
-        .pill-video    { background: rgba(192,132,252,0.15); color: #C084FC; border: 1px solid rgba(192,132,252,0.3); }
-        .pill-audio    { background: rgba(74,222,128,0.15);  color: #4ADE80; border: 1px solid rgba(74,222,128,0.3); }
-        .pill-document { background: rgba(96,165,250,0.15);  color: #60A5FA; border: 1px solid rgba(96,165,250,0.3); }
+        .format-pill:hover {
+            transform: translateY(-2px);
+        }
+        .pill-video    { background: rgba(192,132,252,0.1); color: #D8B4FE; border: 1px solid rgba(192,132,252,0.25); box-shadow: 0 2px 10px rgba(192,132,252,0.1); }
+        .pill-video:hover { background: rgba(192,132,252,0.2); box-shadow: 0 4px 15px rgba(192,132,252,0.2); }
+        
+        .pill-audio    { background: rgba(74,222,128,0.1);  color: #86EFAC; border: 1px solid rgba(74,222,128,0.25); box-shadow: 0 2px 10px rgba(74,222,128,0.1); }
+        .pill-audio:hover { background: rgba(74,222,128,0.2); box-shadow: 0 4px 15px rgba(74,222,128,0.2); }
+        
+        .pill-document { background: rgba(96,165,250,0.1);  color: #93C5FD; border: 1px solid rgba(96,165,250,0.25); box-shadow: 0 2px 10px rgba(96,165,250,0.1); }
+        .pill-document:hover { background: rgba(96,165,250,0.2); box-shadow: 0 4px 15px rgba(96,165,250,0.2); }
 
         /* Upload zone styling */
         [data-testid="stFileUploadDropzone"] {
-            background: var(--surface-color) !important;
-            border: 2px dashed var(--border-color) !important;
-            border-radius: 16px !important;
-            transition: border-color 0.25s ease !important;
+            background: rgba(30, 41, 59, 0.3) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 2px dashed rgba(255, 255, 255, 0.15) !important;
+            border-radius: 20px !important;
+            transition: all 0.3s ease !important;
+            padding: 3rem !important;
         }
         [data-testid="stFileUploadDropzone"]:hover {
             border-color: var(--accent-color) !important;
+            background: rgba(30, 41, 59, 0.5) !important;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.15) !important;
         }
 
         .info-card {
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.25rem 1.5rem;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 1.5rem 1.75rem;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3);
+            animation: fade-in-up 0.5s ease-out;
         }
+        
+        @keyframes fade-in-up {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
         .step-num {
             width: 28px; height: 28px;
             border-radius: 50%;
@@ -112,7 +137,6 @@ def main():
             font-weight: 700; font-size: 0.85rem;
             margin-right: 0.6rem;
             flex-shrink: 0;
-        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -137,21 +161,21 @@ def main():
 
     st.markdown(
         """
-        <div style="margin-bottom:1.75rem;">
-            <p><b>Supported Formats are : </b></p>
-            <span class="format-pill pill-video">🎬 MP4</span>
-            <span class="format-pill pill-video">🎬 MOV</span>
-            <span class="format-pill pill-video">🎬 MKV</span>
-            <span class="format-pill pill-video">🎬 WEBM</span>
-            <br>
-            <span class="format-pill pill-audio">🎙️ MP3</span>
-            <span class="format-pill pill-audio">🎙️ WAV</span>
-            <span class="format-pill pill-audio">🎙️ M4A</span>
-            <br>
-            <span class="format-pill pill-document">📄 PDF</span>
-            <span class="format-pill pill-document">📄 DOCX</span>
-            <span class="format-pill pill-document">📄 PPTX</span>
-            <span class="format-pill pill-document">📄 TXT</span>
+        <div style="margin-bottom:2rem; display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Supported Formats</div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <span class="format-pill pill-video">🎬 MP4</span>
+                <span class="format-pill pill-video">🎬 MOV</span>
+                <span class="format-pill pill-video">🎬 MKV</span>
+                <span class="format-pill pill-video">🎬 WEBM</span>
+                <span class="format-pill pill-audio">🎙️ MP3</span>
+                <span class="format-pill pill-audio">🎙️ WAV</span>
+                <span class="format-pill pill-audio">🎙️ M4A</span>
+                <span class="format-pill pill-document">📄 PDF</span>
+                <span class="format-pill pill-document">📄 DOCX</span>
+                <span class="format-pill pill-document">📄 PPTX</span>
+                <span class="format-pill pill-document">📄 TXT</span>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -172,19 +196,19 @@ def main():
         st.markdown("<br>", unsafe_allow_html=True)
 
 
-        warning_html = "<div style='color:#FBBF24;font-size:0.8rem;'>⚠️ Audio/video will be transcribed — large files may take a few minutes.</div>" if file_type in ['video', 'audio'] else ""
+        warning_html = "<div style='color:#FBBF24;font-size:0.85rem;margin-top:0.5rem;background:rgba(251,191,36,0.1);padding:0.4rem 0.8rem;border-radius:8px;display:inline-block;'><span style='margin-right:4px;'>⚠️</span>Audio/video will be transcribed — large files may take a few minutes.</div>" if file_type in ['video', 'audio'] else ""
         card_html = (
-            '<div class="info-card" style="margin-bottom:1rem;">'
-            '<div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">'
-            f'<div style="font-size:2.5rem;">{meta["icon"]}</div>'
+            '<div class="info-card" style="margin-bottom:1.5rem;">'
+            '<div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">'
+            f'<div style="font-size:2.8rem; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));">{meta["icon"]}</div>'
             '<div style="flex:1;min-width:180px;">'
-            f'<div style="font-weight:700;color:var(--text-main);font-size:1rem;word-break:break-all;">{uploaded_file.name}</div>'
-            '<div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.2rem;">'
-            f'<span style="color:{meta["color"]};font-weight:600;">{meta["label"]}</span>'
-            f'&nbsp;·&nbsp;{size_mb:.2f} MB'
-            '</div></div>'
-            + warning_html
-            + '</div></div>'
+            f'<div style="font-weight:700;color:var(--text-main);font-size:1.1rem;word-break:break-all;letter-spacing:0.02em;">{uploaded_file.name}</div>'
+            '<div style="color:var(--text-muted);font-size:0.9rem;margin-top:0.25rem;">'
+            f'<span style="color:{meta["color"]};font-weight:700;background:rgba(255,255,255,0.05);padding:0.15rem 0.5rem;border-radius:6px;font-size:0.8rem;">{meta["label"]}</span>'
+            f'<span style="margin-left:0.5rem;">{size_mb:.2f} MB</span>'
+            '</div>'
+            + warning_html +
+            '</div></div></div>'
         )
         st.markdown(card_html, unsafe_allow_html=True)
 
@@ -206,14 +230,17 @@ def main():
             view_url = f"http://localhost:8000/upload/{existing_file_id}/view"
             st.markdown(
                 f'<a href="{view_url}" target="_blank" style="'
-                'display:inline-flex;align-items:center;gap:0.45rem;'
-                'padding:0.45rem 1rem;border-radius:8px;font-size:0.88rem;font-weight:600;'
-                'background:rgba(96,165,250,0.12);color:#60A5FA;'
-                'border:1px solid rgba(96,165,250,0.35);text-decoration:none;">'
+                'display:inline-flex;align-items:center;gap:0.5rem;'
+                'padding:0.5rem 1.25rem;border-radius:10px;font-size:0.9rem;font-weight:600;'
+                'background:rgba(96,165,250,0.15);color:#93C5FD;'
+                'border:1px solid rgba(96,165,250,0.3);text-decoration:none;'
+                'transition:all 0.2s ease;" '
+                'onmouseover="this.style.background=\'rgba(96,165,250,0.25)\';this.style.transform=\'translateY(-1px)\'" '
+                'onmouseout="this.style.background=\'rgba(96,165,250,0.15)\';this.style.transform=\'none\'">'
                 '\U0001f441\ufe0f View File</a>',
                 unsafe_allow_html=True,
             )
-        st.markdown("<div style='margin-bottom:0.75rem'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-bottom:1rem'></div>", unsafe_allow_html=True)
 
 
         button_column, space_column = st.columns([2, 5])
@@ -285,11 +312,11 @@ def main():
                                             st.error(f"**Could not process this file**\n\n{status_message}")
                                             break
                                         
-                                        time.sleep(1.5)
+                                        time.sleep(0.2)
                                     else:
-                                        time.sleep(2)
+                                        time.sleep(0.2)
                                 except Exception:
-                                    time.sleep(2)
+                                    time.sleep(0.2)
                                     
                         else:
                             error_message = friendly_error(response=process_response)
@@ -310,8 +337,8 @@ def main():
 
 
     st.markdown(
-        "<div style='color:var(--text-main); font-weight:700; font-size:1rem;"
-        " margin-bottom:1rem;'>How it works</div>",
+        "<div style='color:var(--text-main); font-weight:800; font-size:1.5rem;"
+        " margin-bottom:1.5rem;'>How it works</div>",
         unsafe_allow_html=True,
     )
 

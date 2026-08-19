@@ -9,9 +9,12 @@ class Settings(BaseSettings):
     
     LLM_PROVIDER: str = Field(default="gpt-oss-120b")
     GROQ_API_KEY: str = Field(default="")
+    GOOGLE_API_KEY: str = Field(default="")
+    COHERE_API_KEY: str = Field(default="")
     
-    EMBEDDING_PROVIDER: str = Field(default="huggingface")
-    RERANKER_MODEL_NAME: str = Field(default="BAAI/bge-reranker-base")
+    EMBEDDING_PROVIDER: str = Field(default="google")
+    RERANKER_PROVIDER: str = Field(default="cohere")
+    RERANKER_MODEL_NAME: str = Field(default="rerank-v4.0-fast")
     
     UPLOAD_DIR: str = Field(default="./storage/uploads")
     TRANSCRIPT_DIR: str = Field(default="./storage/transcripts")
