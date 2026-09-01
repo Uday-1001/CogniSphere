@@ -3,7 +3,6 @@ import requests
 
 st.set_page_config(
     page_title="AI Multimedia Assistant",
-    page_icon="🤓",
     layout="wide"
 )
 
