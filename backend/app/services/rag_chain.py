@@ -5,6 +5,7 @@ from langgraph.graph import StateGraph, END
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import SecretStr
 from .retrieval import retrieval_service
 from .embeddings import embedding_service
@@ -16,8 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 model_display = {
-    "gpt-oss-120b": "Groq (GPT-OSS 120B)",
-    "gpt-oss-20b":  "Groq (GPT-OSS 20B)",
+    "gpt-oss-120b":     "Groq (GPT-OSS 120B)",
+    "gpt-oss-20b":      "Groq (GPT-OSS 20B)",
+    "gemini-3.6-flash": "Google Gemini 3.6 Flash",
 }
 
 Expanded_query_prompt = ChatPromptTemplate.from_template(
@@ -53,8 +55,10 @@ class RAGState(TypedDict, total=False):
     query: str
     file_id: Optional[int]
     expanded_queries: List[str]
-    documents: List[Any]
+    documents: List[Document]
     context: str
+    sources: List[str]
+    timestamps: List[dict]
     format_instruction: str
 
     providers_to_try: List[str]
@@ -62,8 +66,6 @@ class RAGState(TypedDict, total=False):
     errors: Annotated[List[str], operator.add]
 
     answer: str
-    sources: List[str]
-    timestamps: List[dict]
 
 
 class RAGChainService:
@@ -85,17 +87,38 @@ class RAGChainService:
             max_tokens=2500
         )
 
+    def create_gemini_model(self, model_name: str = "gemini-3.6-flash") -> ChatGoogleGenerativeAI:
+        if not settings.GOOGLE_API_KEY:
+            raise ValueError("GOOGLE_API_KEY is not configured in settings.")
+        return ChatGoogleGenerativeAI(
+            model=model_name,
+            google_api_key=settings.GOOGLE_API_KEY,
+            temperature=0.2,
+            max_output_tokens=2500,
+        )
+
     def build_llm_for_provider(self, provider: str) -> Any:
+        if provider.startswith("gemini"):
+            model_target = "gemini-3.6-flash" if provider in ["gemini-flash", "gemini-2.5-flash", "gemini-3.6-flash"] else provider
+            return self.create_gemini_model(model_target)
+
         if not settings.GROQ_API_KEY:
-            raise ValueError("GROQ_API_KEY not set.")
+            raise ValueError("GROQ_API_KEY is not configured in settings.")
+        
+        model_name = provider
         if provider == "gpt-oss-120b":
-            return self.create_model("openai/gpt-oss-120b")
+            model_name = "openai/gpt-oss-120b"
         elif provider == "gpt-oss-20b":
-            return self.create_model("openai/gpt-oss-20b")
-        raise ValueError(f"Unknown provider: {provider}")
+            model_name = "openai/gpt-oss-20b"
+            
+        return self.create_model(model_name)
 
     def get_fallback_providers(self) -> List[str]:
-        return ["gpt-oss-20b"] if settings.LLM_PROVIDER == "gpt-oss-120b" else []
+        if settings.LLM_PROVIDER in ["gpt-oss-120b", "openai/gpt-oss-120b"]:
+            return ["gpt-oss-20b", "gemini-3.6-flash"]
+        if settings.LLM_PROVIDER in ["gpt-oss-20b", "openai/gpt-oss-20b"]:
+            return ["gemini-3.6-flash"]
+        return ["gemini-3.6-flash"]
 
     #Expand the Query for vaguelessness
     def expand_query_node(self, state: RAGState) -> Dict[str, Any]:
@@ -291,8 +314,11 @@ class RAGChainService:
         final_state: Dict[str, Any] = self._graph.invoke(initial_state)
 
         if not final_state.get("provider_used"):
+            err_msg = final_state.get("answer", "I'm sorry, I couldn't generate a response.")
+            if final_state.get("errors"):
+                err_msg += f"\n\n*(Error details: {'; '.join(final_state['errors'])})*"
             return {
-                "answer": final_state.get("answer", "I'm sorry, I couldn't generate a response. Please try again."),
+                "answer": err_msg,
                 "sources": [],
                 "timestamps": [],
                 "context_used": "",
