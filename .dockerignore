@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env.local
+.vscode
+.idea
+*.db
+multimedia_assistant.db
+storage/
+backend/storage/
+frontend/
+README.md
+Details DeepDive/

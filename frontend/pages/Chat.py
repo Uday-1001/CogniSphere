@@ -13,7 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ui_enhancer
 ui_enhancer.apply_custom_theme()
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = None

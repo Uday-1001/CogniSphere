@@ -13,7 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ui_enhancer
 ui_enhancer.apply_custom_theme()
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 SUPPORTED_FORMATS = {
     "video":    ["mp4", "mov", "mkv", "avi", "webm"],
@@ -226,7 +226,7 @@ def main():
                 pass
 
         if existing_file_id:
-            view_url = f"http://localhost:8000/upload/{existing_file_id}/view"
+            view_url = f"{API_BASE_URL}/upload/{existing_file_id}/view"
             st.markdown(
                 f'<a href="{view_url}" target="_blank" style="'
                 'display:inline-flex;align-items:center;gap:0.5rem;'
@@ -324,7 +324,7 @@ def main():
 
                     except requests.exceptions.ConnectionError:
                         status.update(label="❌ Connection failed", state="error")
-                        st.error("**Cannot reach the server.**\n\nMake sure the backend is running at `http://localhost:8000`.")
+                        st.error(f"**Cannot reach the server.**\n\nMake sure the backend is running at `{API_BASE_URL}`.")
                     except requests.exceptions.Timeout:
                         status.update(label="❌ Timed out", state="error")
                         st.error("**The request timed out.**\n\nThe file may be very large. Try a smaller file or check your connection.")

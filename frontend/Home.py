@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import requests
 
@@ -9,7 +10,7 @@ st.set_page_config(
 import ui_enhancer
 backend_online = ui_enhancer.apply_custom_theme()
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 def fetch_statistics():
     try:

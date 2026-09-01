@@ -496,13 +496,14 @@ def apply_custom_theme():
     </style>
     """
 
+    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
     backend_online = False
     try:
-        r = requests.get("http://localhost:8000/health", timeout=2)
+        r = requests.get(f"{backend_url}/health", timeout=2)
         backend_online = r.status_code < 500
     except Exception:
         try:
-            r = requests.get("http://localhost:8000/", timeout=2)
+            r = requests.get(f"{backend_url}/", timeout=2)
             backend_online = r.status_code < 500
         except Exception:
             backend_online = False
