@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1
 # Install system audio, OCR, and document rendering dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     poppler-utils \
     tesseract-ocr \
@@ -22,7 +22,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source files
 COPY backend ./backend
-COPY .env .env
 
 # Create required storage directories
 RUN mkdir -p /app/backend/storage/uploads \
