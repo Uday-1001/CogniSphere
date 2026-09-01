@@ -58,11 +58,11 @@ class IngestionState(TypedDict, total=False):
     error: Optional[str]
 
 
-def update_progress(file_id: int, current: int, total: int, message: str = "", is_indeterminate: bool = False) -> None:
+def update_progress(file_id: int, current: int, total: int, message: str = "", is_indeterminate: bool = False, status: str = "processing") -> None:
     processing_progress[file_id] = {
         "current": current,
         "total": total,
-        "status": "processing",
+        "status": status,
         "message": message,
         "is_indeterminate": is_indeterminate,
     }
@@ -144,7 +144,7 @@ def index_node(state: IngestionState) -> Dict[str, Any]:
             qdrant_service.initialize(embedding_service.get_embeddings())
             
         qdrant_service.add_documents(texts, metadatas, ids)
-        update_progress(file_id, 100, 100, "Done", False)
+        update_progress(file_id, 100, 100, "Done", False, status="processed")
         return {}
 
     except Exception as exc:
@@ -227,6 +227,7 @@ def run_file_processing(file_id: int) -> None:
         # pyrefly: ignore [bad-assignment]
         record.processing_error = None
         db.commit()
+        update_progress(file_id, 100, 100, "Done", False, status="processed")
 
     except Exception as processing_error:
         db.rollback()

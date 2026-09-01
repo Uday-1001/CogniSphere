@@ -294,7 +294,7 @@ def main():
                                         
                                         status_text.markdown(f"**{status_message}**")
                                         
-                                        if job_status == "processed":
+                                        if job_status == "processed" or status_message == "Done":
                                             progress_bar.progress(1.0)
                                             st.write("✅ Indexing complete — ready to chat!")
                                             status.update(
