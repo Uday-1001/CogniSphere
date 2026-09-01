@@ -19,7 +19,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install CPU-only PyTorch first to prevent downloading 2GB+ of unnecessary NVIDIA/CUDA drivers
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
