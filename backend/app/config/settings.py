@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     OCR_SCANNED_CHAR_THRESHOLD: int = Field(default=10)
     OCR_MAX_WORKERS: int = Field(default=0)
 
+    ENABLE_DOCLING: bool = Field(default=False)
+
     class Config:
         env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../.env")
         case_sensitive = False

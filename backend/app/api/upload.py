@@ -341,18 +341,21 @@ async def process_file(
 @router.get("/{file_id}/status", response_model=ProgressResponse)
 async def get_process_status(file_id: int, db=Depends(get_db)):
     progress = processing_progress.get(file_id)
-    if progress and progress.get("status") == "error":
+    if progress:
         return ProgressResponse(
-            file_id=file_id, status="error",
-            current=0, total=0,
-            message=progress["message"],
+            file_id=file_id,
+            status=progress.get("status", "processing"),
+            current=progress.get("current", 0),
+            total=progress.get("total", 100),
+            message=progress.get("message", "Processing..."),
         )
 
     database_file_record = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
     if not database_file_record:
-        raise HTTPException(
-            status_code=404,
-            detail="We couldn't locate that file. Please try uploading it again.",
+        return ProgressResponse(
+            file_id=file_id, status="processing",
+            current=0, total=100,
+            message="Processing...",
         )
 
     if database_file_record.status == "error":
@@ -362,24 +365,17 @@ async def get_process_status(file_id: int, db=Depends(get_db)):
             message=database_file_record.processing_error or "Unknown error",
         )
 
-    progress = processing_progress.get(
-        file_id,
-        {"current": 0, "total": 0, "status": database_file_record.status, "message": ""},
-    )
-
     if database_file_record.status == "processed":
         return ProgressResponse(
             file_id=file_id, status="processed",
-            current=progress["total"], total=progress["total"],
+            current=100, total=100,
             message="Done",
         )
 
     return ProgressResponse(
-        file_id=file_id,
-        status=database_file_record.status,
-        current=progress["current"],
-        total=progress["total"],
-        message=progress["message"],
+        file_id=file_id, status=database_file_record.status or "processing",
+        current=0, total=100,
+        message="Processing...",
     )
 
 

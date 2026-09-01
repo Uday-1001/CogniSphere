@@ -311,11 +311,11 @@ def main():
                                             st.error(f"**Could not process this file**\n\n{status_message}")
                                             break
                                         
-                                        time.sleep(0.2)
+                                        time.sleep(1.0)
                                     else:
-                                        time.sleep(0.2)
+                                        time.sleep(1.0)
                                 except Exception:
-                                    time.sleep(0.2)
+                                    time.sleep(1.0)
                                     
                         else:
                             error_message = friendly_error(response=process_response)

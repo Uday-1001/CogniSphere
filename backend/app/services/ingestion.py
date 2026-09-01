@@ -230,7 +230,7 @@ class IngestionService:
                     filename, scan_exc,
                 )
 
-        if docling_available and parse_with_docling is not None:
+        if docling_available and parse_with_docling is not None and getattr(settings, "ENABLE_DOCLING", False):
             try:
                 docs = parse_with_docling(file_path)
                 total_text = " ".join(d.page_content for d in docs).strip()
