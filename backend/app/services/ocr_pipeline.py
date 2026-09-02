@@ -10,7 +10,16 @@ import pymupdf as fitz
 import numpy as np
 from langchain_core.documents import Document
 from PIL import Image, ImageEnhance
-from ..config.settings import settings
+
+try:
+    from app.config.settings import settings
+except ImportError:
+    from ..config.settings import settings
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
 
 for env_var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ[env_var] = "1"
@@ -72,6 +81,18 @@ def detect_section(text: str) -> Optional[str]:
     return None
 
 
+def page_to_pil(page: fitz.Page, dpi: Optional[int] = None, max_px: Optional[int] = None) -> Image.Image:
+    target_dpi = dpi or settings.OCR_DPI
+    target_max_px = max_px or settings.OCR_MAX_PX
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(target_dpi / 72, target_dpi / 72), alpha=False, colorspace=fitz.csRGB)
+    image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+    w, h = image.size
+    if max(w, h) > target_max_px:
+        scale = target_max_px / max(w, h)
+        image = image.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+    return ImageEnhance.Contrast(image).enhance(settings.OCR_CONTRAST_FACTOR)
+
+
 class PDFOCRPipeline:
     SCANNED_CHAR_THRESHOLD = 10
 
@@ -112,16 +133,25 @@ class PDFOCRPipeline:
         try:
             with fitz.open(pdf_path) as pdf:
                 total_pages = len(pdf)
-                logger.info("Starting optimized streaming OCR on '%s' (%d pages)", filename, total_pages)
+                use_gemini = getattr(settings, "OCR_ENGINE", "gemini").lower() == "gemini" and bool(getattr(settings, "GOOGLE_API_KEY", None))
+                logger.info("Starting %s OCR on '%s' (%d pages)", "Gemini Cloud Vision" if use_gemini else "EasyOCR", filename, total_pages)
 
                 for page_num, page in enumerate(pdf):
                     try:
-                        img_array = page_to_image(page, self.dpi, settings.OCR_MAX_PX)
-                        doc = self.ocr_page_worker(page_num, img_array, filename, pdf_path, self.languages)
+                        pil_img = page_to_pil(page, self.dpi, settings.OCR_MAX_PX)
+                        doc = None
+                        if use_gemini:
+                            doc = self.ocr_page_gemini(page_num, pil_img, filename, pdf_path)
+
+                        if doc is None:
+                            img_array = np.array(pil_img)
+                            doc = self.ocr_page_worker(page_num, img_array, filename, pdf_path, self.languages)
+                            del img_array
+
                         if doc:
                             documents.append(doc)
 
-                        del img_array
+                        del pil_img
                         gc.collect()
 
                         logger.info("OCR Progress: %d/%d pages processed ('%s')", page_num + 1, total_pages, filename)
@@ -138,6 +168,50 @@ class PDFOCRPipeline:
         logger.info("OCR complete: %d/%d pages extracted from '%s'.", len(documents), total_pages, filename)
         gc.collect()
         return documents
+
+    def ocr_page_gemini(
+        self,
+        page_num: int,
+        pil_image: Image.Image,
+        filename: str,
+        pdf_path: str,
+    ) -> Optional[Document]:
+        page_label = page_num + 1
+        try:
+            global genai
+            if genai is None:
+                import google.generativeai as genai
+
+            genai.configure(api_key=settings.GOOGLE_API_KEY)
+            model_name = getattr(settings, "OCR_MODEL_NAME", None) or "gemini-3.6-flash"
+            model = genai.GenerativeModel(model_name)
+
+            prompt = (
+                "Extract all text, numbers, structures, and tables from this document image page cleanly into markdown format. "
+                "Do not summarize or invent facts. Preserve exact numbers, dates, IDs, and structure."
+            )
+            response = model.generate_content([prompt, pil_image])
+            page_text = (response.text or "").strip()
+
+            if not page_text:
+                return None
+
+            return Document(
+                page_content=page_text,
+                metadata={
+                    "source": pdf_path,
+                    "filename": filename,
+                    "page_number": page_label,
+                    "section": detect_section(page_text),
+                    "parser_used": f"gemini_{model_name}",
+                    "is_ocr": True,
+                    "document_type": "pdf_scanned",
+                    "ocr_confidence": 0.99,
+                },
+            )
+        except Exception as gemini_err:
+            logger.warning("Gemini Vision OCR failed for page %d (%s) — falling back to EasyOCR.", page_label, gemini_err)
+            return None
 
     def ocr_page_worker(
         self,

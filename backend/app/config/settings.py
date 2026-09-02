@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     
     FRONTEND_PORT: int = Field(default=8501)
 
+    OCR_ENGINE: str = Field(default="gemini")
+    OCR_MODEL_NAME: str = Field(default="gemini-3.6-flash")
+
     OCR_DPI: int = Field(default=200)
     OCR_LANGUAGE: str = Field(default="en")
     OCR_SCANNED_CHAR_THRESHOLD: int = Field(default=10)
