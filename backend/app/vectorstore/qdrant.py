@@ -41,6 +41,18 @@ class QdrantService:
                 raise
         return self._client
 
+    def _create_payload_indexes(self, client: QdrantClient):
+        try:
+            from qdrant_client.models import PayloadSchemaType
+            client.create_payload_index(
+                collection_name=settings.QDRANT_COLLECTION_NAME,
+                field_name="metadata.document_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+            logger.info("Ensured KEYWORD payload index for 'metadata.document_id'")
+        except Exception as idx_err:
+            logger.debug("Payload index creation notice: %s", idx_err)
+
     def initialize(self, embedding_function: Embeddings):
         client = self.get_client()
 
@@ -55,6 +67,7 @@ class QdrantService:
                     sparse_embedding=sparse_embeddings,
                     retrieval_mode=RetrievalMode.HYBRID,
                 )
+                self._create_payload_indexes(client)
             except Exception as e:
                 logger.warning(
                     "Collection '%s' not found or incompatible (%s). Recreating...",
@@ -74,6 +87,7 @@ class QdrantService:
                         ),
                         sparse_vectors_config={"langchain-sparse": SparseVectorParams()},
                     )
+                    self._create_payload_indexes(client)
                 except Exception as create_err:
                     logger.error("Failed to recreate collection: %s", create_err)
                     raise
