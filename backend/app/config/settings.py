@@ -29,10 +29,26 @@ class Settings(BaseSettings):
     
     FRONTEND_PORT: int = Field(default=8501)
 
-    OCR_DPI: int = Field(default=400)
+    OCR_DPI: int = Field(default=200)
     OCR_LANGUAGE: str = Field(default="en")
     OCR_SCANNED_CHAR_THRESHOLD: int = Field(default=10)
-    OCR_MAX_WORKERS: int = Field(default=0)
+    OCR_MAX_WORKERS: int = Field(default=1)
+
+    OCR_MAX_PX: int = Field(default=2400)
+    OCR_CONTRAST_FACTOR: float = Field(default=1.5)
+
+    OCR_DECODER: str = Field(default="greedy")
+    OCR_BEAM_WIDTH: int = Field(default=3)
+    OCR_BATCH_SIZE: int = Field(default=1)
+    OCR_WORKERS: int = Field(default=0)
+
+    OCR_MAG_RATIO: float = Field(default=1.2)
+    OCR_CONTRAST_THS: float = Field(default=0.1)
+    OCR_ADJUST_CONTRAST: float = Field(default=0.5)
+
+    OCR_TEXT_THRESHOLD: float = Field(default=0.6)
+    OCR_LOW_TEXT: float = Field(default=0.3)
+    OCR_LINK_THRESHOLD: float = Field(default=0.4)
 
     ENABLE_DOCLING: bool = Field(default=False)
 

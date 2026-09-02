@@ -4,13 +4,13 @@ import os
 import re
 import threading
 import warnings
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, List, Optional, Any
 
 import pymupdf as fitz
 import numpy as np
 from langchain_core.documents import Document
 from PIL import Image, ImageEnhance
+from ..config.settings import settings
 
 for env_var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ[env_var] = "1"
@@ -34,14 +34,16 @@ def get_reader(languages: List[str]) -> Any:
     return _thread_local.reader
 
 
-def page_to_image(page: fitz.Page, dpi: int, max_px: int = 6000) -> np.ndarray:
-    pixmap = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72), alpha=False, colorspace=fitz.csRGB)
+def page_to_image(page: fitz.Page, dpi: Optional[int] = None, max_px: Optional[int] = None) -> np.ndarray:
+    target_dpi = dpi or settings.OCR_DPI
+    target_max_px = max_px or settings.OCR_MAX_PX
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(target_dpi / 72, target_dpi / 72), alpha=False, colorspace=fitz.csRGB)
     image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
     w, h = image.size
-    if max(w, h) > max_px:
-        scale = max_px / max(w, h)
+    if max(w, h) > target_max_px:
+        scale = target_max_px / max(w, h)
         image = image.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    return np.array(ImageEnhance.Contrast(image).enhance(1.5))
+    return np.array(ImageEnhance.Contrast(image).enhance(settings.OCR_CONTRAST_FACTOR))
 
 
 def sort_into_reading_order(results: list) -> list:
@@ -65,14 +67,14 @@ class PDFOCRPipeline:
 
     def __init__(
         self,
-        dpi: int = 150,
+        dpi: Optional[int] = None,
         languages: Optional[List[str]] = None,
         char_threshold: Optional[int] = None,
         max_workers: Optional[int] = None,
     ):
-        self.dpi = dpi
-        self.languages = languages or ["en"]
-        self.max_workers = max_workers or max(1, (os.cpu_count() or 1) // 2)
+        self.dpi = dpi or settings.OCR_DPI
+        self.languages = languages or settings.OCR_LANGUAGE.split(",")
+        self.max_workers = getattr(settings, "OCR_MAX_WORKERS", 1) or 1
         if char_threshold is not None:
             self.SCANNED_CHAR_THRESHOLD = char_threshold
 
@@ -96,41 +98,33 @@ class PDFOCRPipeline:
         filename: str,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> List[Document]:
+        documents: List[Document] = []
         try:
             with fitz.open(pdf_path) as pdf:
                 total_pages = len(pdf)
-                logger.info("Starting OCR on '%s' (%d pages, %d rasterisation workers)", filename, total_pages, self.max_workers)
-                page_arrays = {}
-                for i, page in enumerate(pdf): # type: ignore
+                logger.info("Starting optimized streaming OCR on '%s' (%d pages)", filename, total_pages)
+
+                for page_num, page in enumerate(pdf):
                     try:
-                        page_arrays[i] = page_to_image(page, self.dpi)
-                    except Exception as e:
-                        logger.warning("Could not rasterise page %d: %s — skipping.", i + 1, e)
+                        img_array = page_to_image(page, self.dpi, settings.OCR_MAX_PX)
+                        doc = self.ocr_page_worker(page_num, img_array, filename, pdf_path, self.languages)
+                        if doc:
+                            documents.append(doc)
+
+                        del img_array
+                        gc.collect()
+
+                        logger.info("OCR Progress: %d/%d pages processed ('%s')", page_num + 1, total_pages, filename)
+                        if progress_callback:
+                            progress_callback(page_num + 1, total_pages, f"🔍 Reading scanned document: {page_num + 1} of {total_pages} pages analysed…")
+                    except Exception as page_err:
+                        logger.warning("OCR worker failed on page %d of '%s': %s — skipping.", page_num + 1, filename, page_err)
+
         except Exception as open_error:
             raise RuntimeError(f"Could not open '{pdf_path}': {open_error}") from open_error
 
-        results = {}
-        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            futures = {
-                pool.submit(self.ocr_page_worker, i, arr, filename, pdf_path, self.languages): i
-                for i, arr in page_arrays.items()
-            }
-            completed = 0
-            for future in as_completed(futures):
-                page_num = futures[future]
-                completed += 1
-                try:
-                    doc = future.result()
-                    if doc:
-                        results[page_num] = doc
-                    logger.info("OCR Progress: %d/%d pages processed ('%s')", completed, total_pages, filename)
-                    if progress_callback:
-                        progress_callback(completed, total_pages, f"🔍 Reading scanned document: {completed} of {total_pages} pages analysed…")
-                except Exception as worker_error:
-                    logger.warning("OCR worker failed on page %d: %s — skipping.", page_num + 1, worker_error)
-
-        documents = [results[i] for i in sorted(results)]
         logger.info("OCR complete: %d/%d pages extracted from '%s'.", len(documents), total_pages, filename)
+        gc.collect()
         return documents
 
     def ocr_page_worker(
@@ -144,7 +138,17 @@ class PDFOCRPipeline:
         page_label = page_num + 1
         reader = get_reader(languages)
         raw_results = reader.readtext(
-            img_array, batch_size=4, decoder='beamsearch', mag_ratio=1.5, adjust_contrast=0.5
+            img_array,
+            batch_size=settings.OCR_BATCH_SIZE,
+            decoder=settings.OCR_DECODER,
+            beamWidth=settings.OCR_BEAM_WIDTH,
+            workers=settings.OCR_WORKERS,
+            mag_ratio=settings.OCR_MAG_RATIO,
+            contrast_ths=settings.OCR_CONTRAST_THS,
+            adjust_contrast=settings.OCR_ADJUST_CONTRAST,
+            text_threshold=settings.OCR_TEXT_THRESHOLD,
+            low_text=settings.OCR_LOW_TEXT,
+            link_threshold=settings.OCR_LINK_THRESHOLD,
         )
         if not raw_results:
             logger.debug("Page %d: no text detected.", page_label)
