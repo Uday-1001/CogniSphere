@@ -14,7 +14,6 @@ class QdrantService:
     _instance = None
     _client: Optional[QdrantClient] = None
     _vectorstore: Optional[QdrantVectorStore] = None
-    _init_failed: bool = False 
 
     def __new__(cls):
         if cls._instance is None:
@@ -23,8 +22,6 @@ class QdrantService:
 
     def get_client(self) -> QdrantClient:
         if self._client is None:
-            if self._init_failed:
-                raise RuntimeError("Qdrant initialization previously failed. Restart the server to retry.")
             try:
                 if settings.QDRANT_URL:
                     self._client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
@@ -35,17 +32,11 @@ class QdrantService:
                     self._client = QdrantClient(path=qdrant_path)
                     logger.info("Using embedded local Qdrant storage at '%s'", qdrant_path)
             except Exception as e:
-                self._init_failed = True
                 logger.error("Failed to initialize QdrantClient: %s", e)
                 raise
         return self._client
 
     def initialize(self, embedding_function: Embeddings):
-        if self._init_failed:
-            raise RuntimeError(
-                "Qdrant initialization previously failed. Restart the server to retry."
-            )
-
         client = self.get_client()
 
         if self._vectorstore is None:
@@ -79,7 +70,6 @@ class QdrantService:
                         sparse_vectors_config={"langchain-sparse": SparseVectorParams()},
                     )
                 except Exception as create_err:
-                    self._init_failed = True
                     logger.error("Failed to recreate collection: %s", create_err)
                     raise
 
@@ -94,8 +84,6 @@ class QdrantService:
 
     @property
     def vectorstore(self) -> Optional[QdrantVectorStore]:
-        if self._init_failed:
-            return None
         if self._vectorstore is None:
             from ..services.embeddings import embedding_service
             self.initialize(embedding_service.get_embeddings())
