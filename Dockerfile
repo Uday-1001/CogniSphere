@@ -1,8 +1,12 @@
 FROM python:3.10-slim
 
-# Prevent Python from writing .pyc files and enable unbuffered logging
+# Prevent Python from writing .pyc files, enable unbuffered logging, and restrict C++ thread pools
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV ONNXRUNTIME_NUM_THREADS=1
 
 # Install system audio, OCR, and document rendering dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

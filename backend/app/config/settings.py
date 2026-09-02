@@ -1,11 +1,14 @@
 from pydantic_settings import BaseSettings
 from pydantic import Field
+from typing import Optional
 import os
 
 class Settings(BaseSettings):
     DATABASE_URL: str = Field(default="sqlite:///./multimedia_assistant.db")
     QDRANT_LOCAL_PATH: str = Field(default="./storage/qdrant")
     QDRANT_COLLECTION_NAME: str = Field(default="multimedia_knowledge_base")
+    QDRANT_URL: Optional[str] = Field(default=None)
+    QDRANT_API_KEY: Optional[str] = Field(default=None)
     
     LLM_PROVIDER: str = Field(default="gpt-oss-120b")
     GROQ_API_KEY: str = Field(default="")

@@ -1,3 +1,4 @@
+import gc
 import logging
 import os
 import re
@@ -6,7 +7,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, List, Optional, Any
 
-import fitz
+import pymupdf as fitz
 import numpy as np
 from langchain_core.documents import Document
 from PIL import Image, ImageEnhance
@@ -25,7 +26,7 @@ def get_reader(languages: List[str]) -> Any:
         try:
             import torch
             import easyocr
-            torch.set_num_threads(max(1, (os.cpu_count() or 1) // 4))
+            torch.set_num_threads(1)
             logger.info("Thread %s: initialising EasyOCR (langs=%s)...", threading.current_thread().name, languages)
             _thread_local.reader = easyocr.Reader(languages, gpu=False, verbose=False)
         except ImportError:

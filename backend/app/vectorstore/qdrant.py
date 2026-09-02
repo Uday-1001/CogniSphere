@@ -1,9 +1,10 @@
+import gc
 from typing import List, Optional
 import logging
 import os
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchValue,PointIdsList, VectorParams, Distance, SparseVectorParams
-from langchain_qdrant import QdrantVectorStore, RetrievalMode, FastEmbedSparse
+from qdrant_client.models import Filter, FieldCondition, MatchValue, PointIdsList, VectorParams, Distance, SparseVectorParams
+from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from langchain_core.embeddings import Embeddings
 from ..config.settings import settings
 
@@ -20,28 +21,39 @@ class QdrantService:
             cls._instance = super().__new__(cls)
         return cls._instance
 
+    def get_client(self) -> QdrantClient:
+        if self._client is None:
+            if self._init_failed:
+                raise RuntimeError("Qdrant initialization previously failed. Restart the server to retry.")
+            try:
+                if settings.QDRANT_URL:
+                    self._client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+                    logger.info("Connected to remote Qdrant instance at '%s'", settings.QDRANT_URL)
+                else:
+                    qdrant_path = getattr(settings, "QDRANT_LOCAL_PATH", None) or "./storage/qdrant"
+                    os.makedirs(qdrant_path, exist_ok=True)
+                    self._client = QdrantClient(path=qdrant_path)
+                    logger.info("Using embedded local Qdrant storage at '%s'", qdrant_path)
+            except Exception as e:
+                self._init_failed = True
+                logger.error("Failed to initialize QdrantClient: %s", e)
+                raise
+        return self._client
+
     def initialize(self, embedding_function: Embeddings):
         if self._init_failed:
             raise RuntimeError(
                 "Qdrant initialization previously failed. Restart the server to retry."
             )
 
-        if self._client is None:
-            qdrant_path = getattr(settings, "QDRANT_LOCAL_PATH", None) or "./storage/qdrant"
-            os.makedirs(qdrant_path, exist_ok=True)
-            try:
-                self._client = QdrantClient(path=qdrant_path)
-                logger.info("Using embedded local Qdrant storage at '%s'", qdrant_path)
-            except Exception as e:
-                self._init_failed = True
-                logger.error("Failed to open local Qdrant storage: %s", e)
-                raise
+        client = self.get_client()
 
         if self._vectorstore is None:
+            from langchain_qdrant import FastEmbedSparse
             sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
             try:
                 self._vectorstore = QdrantVectorStore(
-                    client=self._client,
+                    client=client,
                     collection_name=settings.QDRANT_COLLECTION_NAME,
                     embedding=embedding_function,
                     sparse_embedding=sparse_embeddings,
@@ -53,13 +65,13 @@ class QdrantService:
                     settings.QDRANT_COLLECTION_NAME, e,
                 )
                 try:
-                    self._client.delete_collection(settings.QDRANT_COLLECTION_NAME)
+                    client.delete_collection(settings.QDRANT_COLLECTION_NAME)
                 except Exception:
                     pass
 
                 try:
                     dummy_vector = embedding_function.embed_query("test")
-                    self._client.create_collection(
+                    client.create_collection(
                         collection_name=settings.QDRANT_COLLECTION_NAME,
                         vectors_config=VectorParams(
                             size=len(dummy_vector), distance=Distance.COSINE
@@ -72,7 +84,7 @@ class QdrantService:
                     raise
 
                 self._vectorstore = QdrantVectorStore(
-                    client=self._client,
+                    client=client,
                     collection_name=settings.QDRANT_COLLECTION_NAME,
                     embedding=embedding_function,
                     sparse_embedding=sparse_embeddings,
@@ -91,13 +103,18 @@ class QdrantService:
 
     def reset(self):
         if self._client:
-            self._client.delete_collection(settings.QDRANT_COLLECTION_NAME)
+            try:
+                self._client.delete_collection(settings.QDRANT_COLLECTION_NAME)
+            except Exception:
+                pass
             self._vectorstore = None
+            gc.collect()
 
     def add_documents(self, texts: List[str], metadatas: List[dict], ids: List[str]):
         if self.vectorstore is None:
             raise ValueError("Vectorstore not initialized and failed to auto-initialize.")
         self.vectorstore.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+        gc.collect()
 
     def similarity_search(self, query: str, k: int = 4):
         if self.vectorstore is None:
@@ -110,26 +127,26 @@ class QdrantService:
         return self.vectorstore.similarity_search_with_score(query=query, k=k)
 
     def delete(self, ids: Optional[List[str]] = None, where: Optional[dict] = None):
-        if self._client is None:
-            from ..services.embeddings import embedding_service
-            self.initialize(embedding_service.get_embeddings())
-            
-        if self._client is None:
-            raise ValueError("QdrantClient not initialized.")
-            
-        if ids:
-            self._client.delete(
-                collection_name=settings.QDRANT_COLLECTION_NAME,
-                points_selector=PointIdsList(points=ids), # type: ignore
-            )
-        elif where:
-            conditions = [
-                FieldCondition(key=f"metadata.{key}", match=MatchValue(value=value))
-                for key, value in where.items()
-            ]
-            self._client.delete(
-                collection_name=settings.QDRANT_COLLECTION_NAME,
-                points_selector=Filter(must=conditions), # type: ignore
-            )
+        client = self.get_client()
+        try:
+            if ids:
+                client.delete(
+                    collection_name=settings.QDRANT_COLLECTION_NAME,
+                    points_selector=PointIdsList(points=ids), # type: ignore
+                )
+            elif where:
+                conditions = [
+                    FieldCondition(key=f"metadata.{key}", match=MatchValue(value=value))
+                    for key, value in where.items()
+                ]
+                client.delete(
+                    collection_name=settings.QDRANT_COLLECTION_NAME,
+                    points_selector=Filter(must=conditions), # type: ignore
+                )
+        except Exception as exc:
+            logger.warning("Qdrant delete skipped or failed (collection may not exist yet): %s", exc)
+        finally:
+            gc.collect()
 
 qdrant_service = QdrantService()
+

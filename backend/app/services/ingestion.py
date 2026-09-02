@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import gc
 import logging
 from typing import List, Optional, Dict, Callable
 from langchain_community.document_loaders import PyMuPDFLoader, TextLoader
@@ -10,35 +11,23 @@ from ..config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+_ocr_pipeline_instance = None
 
-try:
-    from .ocr_pipeline import PDFOCRPipeline
-    ocr_pipeline = PDFOCRPipeline(
-        dpi=settings.OCR_DPI,
-        languages=settings.OCR_LANGUAGE.split(","),
-        char_threshold=settings.OCR_SCANNED_CHAR_THRESHOLD,
-        max_workers=settings.OCR_MAX_WORKERS or 4,
-    )
-    ocr_available = True
-except ImportError as _ocr_import_err:
-    ocr_available = False
-    ocr_pipeline = None
-    logger.warning(
-        "OCR pipeline unavailable (%s). Scanned PDFs will not be processed.",
-        _ocr_import_err,
-    )
-
-
-try:
-    from .docling_parser import parse_with_docling
-    docling_available = True
-except ImportError as docling_import_err:
-    docling_available = False
-    parse_with_docling = None
-    logger.warning(
-        "Docling unavailable (%s). Falling back to PyMuPDFLoader for PDFs.",
-        docling_import_err,
-    )
+def get_ocr_pipeline():
+    global _ocr_pipeline_instance
+    if _ocr_pipeline_instance is None:
+        try:
+            from .ocr_pipeline import PDFOCRPipeline
+            _ocr_pipeline_instance = PDFOCRPipeline(
+                dpi=settings.OCR_DPI,
+                languages=settings.OCR_LANGUAGE.split(","),
+                char_threshold=settings.OCR_SCANNED_CHAR_THRESHOLD,
+                max_workers=settings.OCR_MAX_WORKERS or 1,
+            )
+        except Exception as _ocr_err:
+            logger.warning("OCR pipeline initialization failed: %s", _ocr_err)
+            return None
+    return _ocr_pipeline_instance
 
 
 Markdown_headers = [
@@ -51,18 +40,17 @@ Markdown_headers = [
 def make_pymupdf_documents(file_path: str, progress_callback: Optional[Callable] = None) -> List[Document]:
     loader = PyMuPDFLoader(file_path)
     
-    import fitz
+    import pymupdf as fitz
     import time
-    doc = fitz.open(file_path)
-    total_pages = len(doc)
-    doc.close()
+    with fitz.open(file_path) as doc:
+        total_pages = len(doc)
     
     docs = []
     for i, doc in enumerate(loader.lazy_load()):
         if progress_callback:
             progress_callback(i + 1, total_pages, f"📄 Extracting page {i + 1} of {total_pages}...")
             
-        time.sleep(0.5)  # SIMULATED SLOW EXTRACTION TO TEST REALTIME PROGRESS
+        time.sleep(0.1)
         
         raw_page = doc.metadata.pop("page", None)
         doc.metadata.setdefault("page_number", (raw_page + 1) if raw_page is not None else None)
@@ -209,6 +197,7 @@ class IngestionService:
                 )
             enriched.append(enriched_doc)
 
+        gc.collect()
         return enriched
 
 
@@ -218,11 +207,12 @@ class IngestionService:
         progress_callback: Optional[Callable] = None,
     ) -> List[Document]:
         filename = os.path.basename(file_path)
+        ocr_pipe = get_ocr_pipeline()
 
-        if ocr_available and ocr_pipeline is not None:
+        if ocr_pipe is not None:
             try:
-                if ocr_pipeline.is_scanned(file_path):
-                    logger.info("'%s' is scanned — routing to PaddleOCR.", filename)
+                if ocr_pipe.is_scanned(file_path):
+                    logger.info("'%s' is scanned — routing to EasyOCR.", filename)
                     return self.run_ocr(file_path, progress_callback)
             except Exception as scan_exc:
                 logger.warning(
@@ -230,8 +220,9 @@ class IngestionService:
                     filename, scan_exc,
                 )
 
-        if docling_available and parse_with_docling is not None and getattr(settings, "ENABLE_DOCLING", False):
+        if getattr(settings, "ENABLE_DOCLING", False):
             try:
+                from .docling_parser import parse_with_docling
                 docs = parse_with_docling(file_path)
                 total_text = " ".join(d.page_content for d in docs).strip()
                 if len(total_text) < 100:
@@ -250,7 +241,7 @@ class IngestionService:
         docs = make_pymupdf_documents(file_path, progress_callback)
 
         total_text = " ".join(d.page_content for d in docs).strip()
-        if len(total_text) < 100 and ocr_available and ocr_pipeline is not None:
+        if len(total_text) < 100 and ocr_pipe is not None:
             logger.info(
                 "'%s' yielded only %d chars via PyMuPDF — attempting OCR fallback.",
                 filename, len(total_text),
@@ -265,8 +256,9 @@ class IngestionService:
     def load_docx(self, file_path: str) -> List[Document]:
         filename = os.path.basename(file_path)
 
-        if docling_available and parse_with_docling is not None:
+        if getattr(settings, "ENABLE_DOCLING", False):
             try:
+                from .docling_parser import parse_with_docling
                 return parse_with_docling(file_path)
             except Exception as exc:
                 logger.warning(
@@ -321,8 +313,9 @@ class IngestionService:
     def load_pptx(self, file_path: str) -> List[Document]:
         filename = os.path.basename(file_path)
 
-        if docling_available and parse_with_docling is not None:
+        if getattr(settings, "ENABLE_DOCLING", False):
             try:
+                from .docling_parser import parse_with_docling
                 return parse_with_docling(file_path)
             except Exception as exc:
                 logger.warning(
@@ -404,13 +397,13 @@ class IngestionService:
         file_path: str,
         progress_callback: Optional[Callable] = None,
     ) -> List[Document]:
-        if not ocr_available or ocr_pipeline is None:
+        ocr_pipe = get_ocr_pipeline()
+        if ocr_pipe is None:
             raise RuntimeError(
-                "OCR is required for this file but PaddleOCR / PyMuPDF are not installed. "
-                "Run: pip install paddlepaddle paddleocr PyMuPDF"
+                "OCR is required for this file but EasyOCR / PyMuPDF failed to initialize."
             )
         filename = os.path.basename(file_path)
-        return ocr_pipeline.process(file_path, filename, progress_callback)
+        return ocr_pipe.process(file_path, filename, progress_callback)
 
 
 ingestion_service = IngestionService()

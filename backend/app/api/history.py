@@ -1,4 +1,5 @@
 import os
+import gc
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
@@ -64,6 +65,7 @@ async def get_chat_sessions(db=Depends(get_db)):
             ) for message in messages]
         ))
 
+    gc.collect()
     return result
 
 
@@ -72,7 +74,7 @@ async def get_documents(db=Depends(get_db)):
     documents = db.query(UploadedFile).order_by(
         UploadedFile.created_at.desc()).limit(50).all()
 
-    return [DocumentResponse(
+    res = [DocumentResponse(
         id=document.id,
         filename=document.original_filename,
         file_type=document.file_type,
@@ -80,6 +82,9 @@ async def get_documents(db=Depends(get_db)):
         status=document.status,
         created_at=document.created_at
     ) for document in documents]
+
+    gc.collect()
+    return res
 
 
 @router.delete("/document/{file_id}")
@@ -93,14 +98,23 @@ async def delete_document(file_id: int, db=Depends(get_db)):
 
     if database_file_record.file_path and os.path.exists(
             database_file_record.file_path):
-        os.remove(database_file_record.file_path)
+        try:
+            os.remove(database_file_record.file_path)
+        except Exception:
+            pass
 
     if database_file_record.transcript_path and os.path.exists(
             database_file_record.transcript_path):
-        os.remove(database_file_record.transcript_path)
+        try:
+            os.remove(database_file_record.transcript_path)
+        except Exception:
+            pass
 
     from ..vectorstore.qdrant import qdrant_service
-    qdrant_service.delete(where={"document_id": str(file_id)})
+    try:
+        qdrant_service.delete(where={"document_id": str(file_id)})
+    except Exception:
+        pass
 
     db.delete(database_file_record)
     try:
@@ -109,6 +123,7 @@ async def delete_document(file_id: int, db=Depends(get_db)):
         pass
     db.commit()
 
+    gc.collect()
     return {"message": "Document deleted successfully"}
 
 
@@ -149,4 +164,6 @@ async def bulk_delete_documents(request: BulkDeleteRequest, db=Depends(get_db)):
             pass
         db.commit()
 
+    gc.collect()
     return {"message": f"Successfully deleted {len(deleted_ids)} documents.", "deleted_ids": deleted_ids}
+

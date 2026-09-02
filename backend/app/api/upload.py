@@ -250,6 +250,8 @@ def run_file_processing(file_id: int) -> None:
         }
     finally:
         db.close()
+        import gc
+        gc.collect()
 
 
 @router.post("/", response_model=UploadResponse)
