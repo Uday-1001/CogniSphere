@@ -37,6 +37,22 @@ Markdown_headers = [
 ]
 
 
+def is_scanned_pdf(file_path: str, char_threshold: int = 10) -> bool:
+    try:
+        import pymupdf as fitz
+        with fitz.open(file_path) as pdf:
+            total_chars = 0
+            for page in pdf:
+                text = page.get_text()
+                if isinstance(text, str):
+                    total_chars += len(text.strip())
+            avg_chars = total_chars / max(len(pdf), 1)
+            return avg_chars < char_threshold
+    except Exception as file_error:
+        logger.warning("Could not read PDF text layer: %s — assuming digital.", file_error)
+        return False
+
+
 def make_pymupdf_documents(file_path: str, progress_callback: Optional[Callable] = None) -> List[Document]:
     loader = PyMuPDFLoader(file_path)
     
@@ -50,7 +66,7 @@ def make_pymupdf_documents(file_path: str, progress_callback: Optional[Callable]
         if progress_callback:
             progress_callback(i + 1, total_pages, f"📄 Extracting page {i + 1} of {total_pages}...")
             
-        time.sleep(0.1)
+        time.sleep(0.01)
         
         raw_page = doc.metadata.pop("page", None)
         doc.metadata.setdefault("page_number", (raw_page + 1) if raw_page is not None else None)
@@ -207,18 +223,14 @@ class IngestionService:
         progress_callback: Optional[Callable] = None,
     ) -> List[Document]:
         filename = os.path.basename(file_path)
-        ocr_pipe = get_ocr_pipeline()
 
-        if ocr_pipe is not None:
-            try:
-                if ocr_pipe.is_scanned(file_path):
-                    logger.info("'%s' is scanned — routing to EasyOCR.", filename)
-                    return self.run_ocr(file_path, progress_callback)
-            except Exception as scan_exc:
-                logger.warning(
-                    "Scan-detection failed for '%s' (%s) — assuming digital.",
-                    filename, scan_exc,
-                )
+        if is_scanned_pdf(file_path, char_threshold=getattr(settings, "OCR_SCANNED_CHAR_THRESHOLD", 10)):
+            logger.info("'%s' is scanned (0 text layer) — routing to EasyOCR.", filename)
+            ocr_pipe = get_ocr_pipeline()
+            if ocr_pipe is not None:
+                return ocr_pipe.process(file_path, filename, progress_callback)
+            else:
+                logger.warning("OCR pipeline failed to initialize for '%s'.", filename)
 
         if getattr(settings, "ENABLE_DOCLING", False):
             try:
@@ -226,29 +238,22 @@ class IngestionService:
                 docs = parse_with_docling(file_path)
                 total_text = " ".join(d.page_content for d in docs).strip()
                 if len(total_text) < 100:
-                    raise RuntimeError(
-                        f"Docling extracted only {len(total_text)} characters — "
-                        "content appears empty; trying fallback."
-                    )
+                    raise RuntimeError("Docling content empty; trying fallback.")
                 return docs
             except Exception as docling_exc:
-                logger.warning(
-                    "Docling failed for '%s' (%s) — falling back to PyMuPDFLoader.",
-                    filename, docling_exc,
-                )
+                logger.warning("Docling failed for '%s' (%s) — falling back.", filename, docling_exc)
 
-        logger.info("'%s' — using PyMuPDFLoader (fallback).", filename)
+        logger.info("'%s' — using PyMuPDFLoader (digital).", filename)
         docs = make_pymupdf_documents(file_path, progress_callback)
 
         total_text = " ".join(d.page_content for d in docs).strip()
-        if len(total_text) < 100 and ocr_pipe is not None:
-            logger.info(
-                "'%s' yielded only %d chars via PyMuPDF — attempting OCR fallback.",
-                filename, len(total_text),
-            )
-            ocr_docs = self.run_ocr(file_path, progress_callback)
-            if ocr_docs:
-                return ocr_docs
+        if len(total_text) < 50:
+            ocr_pipe = get_ocr_pipeline()
+            if ocr_pipe is not None:
+                logger.info("'%s' yielded < 50 chars — attempting OCR fallback.", filename)
+                ocr_docs = ocr_pipe.process(file_path, filename, progress_callback)
+                if ocr_docs:
+                    return ocr_docs
 
         return docs
 

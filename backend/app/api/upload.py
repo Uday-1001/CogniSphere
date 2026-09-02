@@ -142,8 +142,14 @@ def index_node(state: IngestionState) -> Dict[str, Any]:
 
         if qdrant_service.vectorstore is None:
             qdrant_service.initialize(embedding_service.get_embeddings())
-            
-        qdrant_service.add_documents(texts, metadatas, ids)
+
+        batch_size = 25
+        for i in range(0, len(texts), batch_size):
+            b_texts = texts[i:i + batch_size]
+            b_metadatas = metadatas[i:i + batch_size]
+            b_ids = ids[i:i + batch_size]
+            qdrant_service.add_documents(b_texts, b_metadatas, b_ids)
+
         update_progress(file_id, 100, 100, "Done", False, status="processed")
         return {}
 
