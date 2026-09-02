@@ -29,7 +29,7 @@ class QdrantService:
                 api_key = raw_api_key.strip() if raw_api_key and raw_api_key.strip() else None
 
                 if url:
-                    self._client = QdrantClient(url=url, api_key=api_key)
+                    self._client = QdrantClient(url=url, api_key=api_key, timeout=60)
                     logger.info("Connected to remote Qdrant instance at '%s'", url)
                 else:
                     qdrant_path = getattr(settings, "QDRANT_LOCAL_PATH", None) or "./storage/qdrant"
@@ -124,10 +124,14 @@ class QdrantService:
             self._vectorstore = None
             gc.collect()
 
-    def add_documents(self, texts: List[str], metadatas: List[dict], ids: List[str]):
+    def add_documents(self, texts: List[str], metadatas: List[dict], ids: List[str], batch_size: int = 20):
         if self.vectorstore is None:
             raise ValueError("Vectorstore not initialized and failed to auto-initialize.")
-        self.vectorstore.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+            batch_metadatas = metadatas[i : i + batch_size]
+            batch_ids = ids[i : i + batch_size]
+            self.vectorstore.add_texts(texts=batch_texts, metadatas=batch_metadatas, ids=batch_ids)
         gc.collect()
 
     def similarity_search(self, query: str, k: int = 4):
