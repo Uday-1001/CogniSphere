@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     OCR_SCANNED_CHAR_THRESHOLD: int = Field(default=10)
     OCR_MAX_WORKERS: int = Field(default=1)
 
-    OCR_MAX_PX: int = Field(default=2400)
+    OCR_MAX_PX: int = Field(default=1600)
     OCR_CONTRAST_FACTOR: float = Field(default=1.5)
 
     OCR_DECODER: str = Field(default="greedy")

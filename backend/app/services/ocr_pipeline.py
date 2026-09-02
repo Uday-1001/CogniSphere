@@ -135,21 +135,23 @@ class PDFOCRPipeline:
         pdf_path: str,
         languages: List[str],
     ) -> Optional[Document]:
+        import torch
         page_label = page_num + 1
         reader = get_reader(languages)
-        raw_results = reader.readtext(
-            img_array,
-            batch_size=settings.OCR_BATCH_SIZE,
-            decoder=settings.OCR_DECODER,
-            beamWidth=settings.OCR_BEAM_WIDTH,
-            workers=settings.OCR_WORKERS,
-            mag_ratio=settings.OCR_MAG_RATIO,
-            contrast_ths=settings.OCR_CONTRAST_THS,
-            adjust_contrast=settings.OCR_ADJUST_CONTRAST,
-            text_threshold=settings.OCR_TEXT_THRESHOLD,
-            low_text=settings.OCR_LOW_TEXT,
-            link_threshold=settings.OCR_LINK_THRESHOLD,
-        )
+        with torch.no_grad():
+            raw_results = reader.readtext(
+                img_array,
+                batch_size=settings.OCR_BATCH_SIZE,
+                decoder=settings.OCR_DECODER,
+                beamWidth=settings.OCR_BEAM_WIDTH,
+                workers=settings.OCR_WORKERS,
+                mag_ratio=settings.OCR_MAG_RATIO,
+                contrast_ths=settings.OCR_CONTRAST_THS,
+                adjust_contrast=settings.OCR_ADJUST_CONTRAST,
+                text_threshold=settings.OCR_TEXT_THRESHOLD,
+                low_text=settings.OCR_LOW_TEXT,
+                link_threshold=settings.OCR_LINK_THRESHOLD,
+            )
         if not raw_results:
             logger.debug("Page %d: no text detected.", page_label)
             return None
