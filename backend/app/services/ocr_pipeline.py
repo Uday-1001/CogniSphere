@@ -143,8 +143,23 @@ class PDFOCRPipeline:
                         doc = None
                         if use_gemini:
                             doc = self.ocr_page_gemini(page_num, pil_img, filename, pdf_path)
-
-                        if doc is None:
+                            if doc is None:
+                                raw_text = page.get_text("text") if hasattr(page, "get_text") else ""
+                                page_text = raw_text.strip() if isinstance(raw_text, str) else ""
+                                if page_text:
+                                    doc = Document(
+                                        page_content=page_text,
+                                        metadata={
+                                            "source": pdf_path,
+                                            "filename": filename,
+                                            "page_number": page_num + 1,
+                                            "section": detect_section(page_text),
+                                            "parser_used": "pymupdf_fallback",
+                                            "is_ocr": False,
+                                            "document_type": "pdf_scanned",
+                                        },
+                                    )
+                        else:
                             img_array = np.array(pil_img)
                             doc = self.ocr_page_worker(page_num, img_array, filename, pdf_path, self.languages)
                             del img_array
@@ -195,7 +210,7 @@ class PDFOCRPipeline:
 
         target_model = getattr(settings, "OCR_MODEL_NAME", None) or "gemini-3.6-flash"
         candidate_models = [target_model]
-        for fallback_name in ["gemini-3.7-flash"]:
+        for fallback_name in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-3.7-flash"]:
             if fallback_name not in candidate_models:
                 candidate_models.append(fallback_name)
 
