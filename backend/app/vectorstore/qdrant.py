@@ -23,9 +23,14 @@ class QdrantService:
     def get_client(self) -> QdrantClient:
         if self._client is None:
             try:
-                if settings.QDRANT_URL:
-                    self._client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
-                    logger.info("Connected to remote Qdrant instance at '%s'", settings.QDRANT_URL)
+                raw_url = getattr(settings, "QDRANT_URL", None)
+                raw_api_key = getattr(settings, "QDRANT_API_KEY", None)
+                url = raw_url.strip().rstrip("/") if raw_url and raw_url.strip() else None
+                api_key = raw_api_key.strip() if raw_api_key and raw_api_key.strip() else None
+
+                if url:
+                    self._client = QdrantClient(url=url, api_key=api_key)
+                    logger.info("Connected to remote Qdrant instance at '%s'", url)
                 else:
                     qdrant_path = getattr(settings, "QDRANT_LOCAL_PATH", None) or "./storage/qdrant"
                     os.makedirs(qdrant_path, exist_ok=True)

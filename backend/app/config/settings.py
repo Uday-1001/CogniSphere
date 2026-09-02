@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 from typing import Optional
 import os
 
@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     OCR_MAX_WORKERS: int = Field(default=0)
 
     ENABLE_DOCLING: bool = Field(default=False)
+
+    @field_validator(
+        "QDRANT_URL", "QDRANT_API_KEY", "GROQ_API_KEY",
+        "GOOGLE_API_KEY", "COHERE_API_KEY", "DATABASE_URL",
+        mode="before"
+    )
+    def strip_credentials(cls, v):
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     class Config:
         env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../.env")
