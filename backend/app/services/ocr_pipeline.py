@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 _thread_local = threading.local()
 
 
+def unload_reader():
+    if hasattr(_thread_local, "reader"):
+        try:
+            delattr(_thread_local, "reader")
+            logger.info("Unloaded EasyOCR PyTorch reader from memory.")
+        except Exception as e:
+            logger.warning("Error unloading EasyOCR reader: %s", e)
+    gc.collect()
+
+
 def get_reader(languages: List[str]) -> Any:
     if not hasattr(_thread_local, "reader"):
         try:
@@ -122,6 +132,8 @@ class PDFOCRPipeline:
 
         except Exception as open_error:
             raise RuntimeError(f"Could not open '{pdf_path}': {open_error}") from open_error
+        finally:
+            unload_reader()
 
         logger.info("OCR complete: %d/%d pages extracted from '%s'.", len(documents), total_pages, filename)
         gc.collect()

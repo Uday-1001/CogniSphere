@@ -57,15 +57,22 @@ class QdrantService:
         client = self.get_client()
 
         if self._vectorstore is None:
-            from langchain_qdrant import FastEmbedSparse
-            sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
+            sparse_embeddings = None
+            retrieval_mode = RetrievalMode.DENSE
+            try:
+                from langchain_qdrant import FastEmbedSparse
+                sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
+                retrieval_mode = RetrievalMode.HYBRID
+            except Exception as fastembed_err:
+                logger.warning("FastEmbedSparse (BM25) initialization skipped/failed (%s) — using DENSE mode.", fastembed_err)
+
             try:
                 self._vectorstore = QdrantVectorStore(
                     client=client,
                     collection_name=settings.QDRANT_COLLECTION_NAME,
                     embedding=embedding_function,
                     sparse_embedding=sparse_embeddings,
-                    retrieval_mode=RetrievalMode.HYBRID,
+                    retrieval_mode=retrieval_mode,
                 )
                 self._create_payload_indexes(client)
             except Exception as e:
