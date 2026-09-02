@@ -17,6 +17,7 @@ except ImportError:
     from ..config.settings import settings
 
 try:
+    # pyrefly: ignore [missing-import]
     import google.generativeai as genai
 except ImportError:
     genai = None
@@ -177,41 +178,56 @@ class PDFOCRPipeline:
         pdf_path: str,
     ) -> Optional[Document]:
         page_label = page_num + 1
-        try:
-            global genai
-            if genai is None:
+        global genai
+        if genai is None:
+            try:
+                # pyrefly: ignore [missing-import]
                 import google.generativeai as genai
-
-            genai.configure(api_key=settings.GOOGLE_API_KEY)
-            model_name = getattr(settings, "OCR_MODEL_NAME", None) or "gemini-3.6-flash"
-            model = genai.GenerativeModel(model_name)
-
-            prompt = (
-                "Extract all text, numbers, structures, and tables from this document image page cleanly into markdown format. "
-                "Do not summarize or invent facts. Preserve exact numbers, dates, IDs, and structure."
-            )
-            response = model.generate_content([prompt, pil_image])
-            page_text = (response.text or "").strip()
-
-            if not page_text:
+            except ImportError:
+                logger.error("google.generativeai not installed for Gemini Cloud OCR.")
                 return None
 
-            return Document(
-                page_content=page_text,
-                metadata={
-                    "source": pdf_path,
-                    "filename": filename,
-                    "page_number": page_label,
-                    "section": detect_section(page_text),
-                    "parser_used": f"gemini_{model_name}",
-                    "is_ocr": True,
-                    "document_type": "pdf_scanned",
-                    "ocr_confidence": 0.99,
-                },
-            )
-        except Exception as gemini_err:
-            logger.warning("Gemini Vision OCR failed for page %d (%s) — falling back to EasyOCR.", page_label, gemini_err)
+        try:
+            genai.configure(api_key=settings.GOOGLE_API_KEY)
+        except Exception as cfg_err:
+            logger.warning("Failed to configure genai API key: %s", cfg_err)
             return None
+
+        target_model = getattr(settings, "OCR_MODEL_NAME", None) or "gemini-3.6-flash"
+        candidate_models = [target_model]
+        for fallback_name in ["gemini-3.7-flash"]:
+            if fallback_name not in candidate_models:
+                candidate_models.append(fallback_name)
+
+        prompt = (
+            "Extract all text, numbers, structures, and tables from this document image page cleanly into markdown format. "
+            "Do not summarize or invent facts. Preserve exact numbers, dates, IDs, and structure."
+        )
+
+        for model_name in candidate_models:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content([prompt, pil_image])
+                page_text = (response.text or "").strip()
+
+                if page_text:
+                    return Document(
+                        page_content=page_text,
+                        metadata={
+                            "source": pdf_path,
+                            "filename": filename,
+                            "page_number": page_label,
+                            "section": detect_section(page_text),
+                            "parser_used": f"gemini_{model_name}",
+                            "is_ocr": True,
+                            "document_type": "pdf_scanned",
+                            "ocr_confidence": 0.99,
+                        },
+                    )
+            except Exception as model_err:
+                logger.warning("Gemini Vision OCR with '%s' failed for page %d (%s)", model_name, page_label, model_err)
+
+        return None
 
     def ocr_page_worker(
         self,

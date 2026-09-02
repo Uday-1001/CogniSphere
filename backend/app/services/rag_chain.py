@@ -206,6 +206,12 @@ class RAGChainService:
 
     # Generate Node Of Graph
     def generate_node(self, state: RAGState) -> Dict[str, Any]:
+        if state.get("file_id") is not None and not state.get("documents"):
+            return {
+                "provider_used": settings.LLM_PROVIDER,
+                "answer": "⚠️ No relevant information was found in the selected document to answer your query. Please make sure the document has been fully processed or select 'All Sources Selected'.",
+            }
+
         providers_to_try: List[str] = state.get("providers_to_try") or []
 
         if not providers_to_try:
