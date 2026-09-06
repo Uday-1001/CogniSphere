@@ -4,7 +4,7 @@ import os
 import re
 import threading
 import warnings
-from typing import Callable, List, Optional, Any
+from typing import Callable, List, Optional, Any, Union
 
 import pymupdf as fitz
 import numpy as np
@@ -30,28 +30,33 @@ logger = logging.getLogger(__name__)
 
 _thread_local = threading.local()
 
+LANG_MAP = {
+    "en": "eng", "es": "spa", "fr": "fra", "de": "deu",
+    "it": "ita", "pt": "por", "ru": "rus", "zh": "chi_sim",
+    "ja": "jpn", "ar": "ara", "hi": "hin", "nl": "nld",
+    "pl": "pol", "tr": "tur", "uk": "ukr", "cs": "ces",
+    "sv": "swe", "da": "dan", "fi": "fin", "no": "nor",
+}
+
+
+def normalize_languages(languages: List[str]) -> str:
+    normalized = []
+    for lang in (languages or ["eng"]):
+        l = str(lang).strip().lower()
+        normalized.append(LANG_MAP.get(l, l))
+    return "+".join(normalized) if normalized else "eng"
+
 
 def unload_reader():
-    if hasattr(_thread_local, "reader"):
-        try:
-            delattr(_thread_local, "reader")
-            logger.info("Unloaded EasyOCR PyTorch reader from memory.")
-        except Exception as e:
-            logger.warning("Error unloading EasyOCR reader: %s", e)
     gc.collect()
 
 
 def get_reader(languages: List[str]) -> Any:
-    if not hasattr(_thread_local, "reader"):
-        try:
-            import torch
-            import easyocr
-            torch.set_num_threads(1)
-            logger.info("Thread %s: initialising EasyOCR (langs=%s)...", threading.current_thread().name, languages)
-            _thread_local.reader = easyocr.Reader(languages, gpu=False, verbose=False)
-        except ImportError:
-            raise ImportError("EasyOCR is not installed. Run: pip install easyocr")
-    return _thread_local.reader
+    try:
+        import pytesseract
+        return pytesseract
+    except ImportError:
+        raise ImportError("pytesseract is not installed. Run: pip install pytesseract")
 
 
 def page_to_image(page: fitz.Page, dpi: Optional[int] = None, max_px: Optional[int] = None) -> np.ndarray:
@@ -74,6 +79,8 @@ def sort_into_reading_order(results: list) -> list:
 
 
 def detect_section(text: str) -> Optional[str]:
+    if not isinstance(text, str):
+        return None
     for line in (l.strip() for l in text.splitlines()):
         if line and len(line) < 80 and (
             (line.isupper() and len(line) > 3) or line.endswith(":") or re.match(r"^\d+[\.\/\)]\s+\w", line)
@@ -134,8 +141,8 @@ class PDFOCRPipeline:
         try:
             with fitz.open(pdf_path) as pdf:
                 total_pages = len(pdf)
-                use_gemini = getattr(settings, "OCR_ENGINE", "gemini").lower() == "gemini" and bool(getattr(settings, "GOOGLE_API_KEY", None))
-                logger.info("Starting %s OCR on '%s' (%d pages)", "Gemini Cloud Vision" if use_gemini else "EasyOCR", filename, total_pages)
+                use_gemini = getattr(settings, "OCR_ENGINE", "tesseract").lower() == "gemini" and bool(getattr(settings, "GOOGLE_API_KEY", None))
+                logger.info("Starting %s OCR on '%s' (%d pages)", "Gemini Cloud Vision" if use_gemini else "Tesseract OCR", filename, total_pages)
 
                 for page_num, page in enumerate(pdf):
                     try:
@@ -160,9 +167,7 @@ class PDFOCRPipeline:
                                         },
                                     )
                         else:
-                            img_array = np.array(pil_img)
-                            doc = self.ocr_page_worker(page_num, img_array, filename, pdf_path, self.languages)
-                            del img_array
+                            doc = self.ocr_page_worker(page_num, pil_img, filename, pdf_path, self.languages)
 
                         if doc:
                             documents.append(doc)
@@ -247,39 +252,69 @@ class PDFOCRPipeline:
     def ocr_page_worker(
         self,
         page_num: int,
-        img_array: np.ndarray,
+        img_input: Any,
         filename: str,
         pdf_path: str,
         languages: List[str],
     ) -> Optional[Document]:
-        import torch
+        import pytesseract
+
         page_label = page_num + 1
-        reader = get_reader(languages)
-        with torch.no_grad():
-            raw_results = reader.readtext(
-                img_array,
-                batch_size=settings.OCR_BATCH_SIZE,
-                decoder=settings.OCR_DECODER,
-                beamWidth=settings.OCR_BEAM_WIDTH,
-                workers=settings.OCR_WORKERS,
-                mag_ratio=settings.OCR_MAG_RATIO,
-                contrast_ths=settings.OCR_CONTRAST_THS,
-                adjust_contrast=settings.OCR_ADJUST_CONTRAST,
-                text_threshold=settings.OCR_TEXT_THRESHOLD,
-                low_text=settings.OCR_LOW_TEXT,
-                link_threshold=settings.OCR_LINK_THRESHOLD,
+        lang_str = normalize_languages(languages)
+
+        tess_cmd = getattr(settings, "TESSERACT_CMD", None) or os.environ.get("TESSERACT_CMD")
+        if tess_cmd:
+            pytesseract.pytesseract.tesseract_cmd = tess_cmd
+
+        psm = getattr(settings, "OCR_PSM", 3)
+        oem = getattr(settings, "OCR_OEM", 3)
+        tess_config = f"--psm {psm} --oem {oem}"
+
+        if isinstance(img_input, np.ndarray):
+            pil_image = Image.fromarray(img_input)
+        elif isinstance(img_input, Image.Image):
+            pil_image = img_input
+        else:
+            raise ValueError(f"Unsupported image format for Tesseract worker: {type(img_input)}")
+
+        try:
+            raw_output = pytesseract.image_to_string(
+                pil_image,
+                lang=lang_str,
+                config=tess_config,
+                output_type=pytesseract.Output.STRING,
             )
-        if not raw_results:
-            logger.debug("Page %d: no text detected.", page_label)
+            if isinstance(raw_output, dict):
+                text_val = raw_output.get("text", "")
+                if isinstance(text_val, list):
+                    page_text = " ".join(str(x) for x in text_val).strip()
+                else:
+                    page_text = str(text_val).strip()
+            elif isinstance(raw_output, (list, tuple)):
+                page_text = " ".join(str(x) for x in raw_output).strip()
+            elif raw_output is not None:
+                page_text = str(raw_output).strip()
+            else:
+                page_text = ""
+        except Exception as ocr_exc:
+            logger.warning("Tesseract image_to_string failed on page %d of '%s': %s", page_label, filename, ocr_exc)
             return None
 
-        valid_items = [(t.strip(), conf) for _, t, conf in sort_into_reading_order(raw_results) if t.strip()]
-        if not valid_items:
+        if not page_text:
+            logger.debug("Page %d of '%s': no text detected by Tesseract.", page_label, filename)
             return None
 
-        lines, confidences = zip(*valid_items)
-        page_text = "\n".join(lines)
-        mean_conf = float(np.mean(confidences))
+        mean_conf = 0.95
+        try:
+            data = pytesseract.image_to_data(pil_image, lang=lang_str, config=tess_config, output_type=pytesseract.Output.DICT)
+            confs = [
+                float(c) for c, t in zip(data.get("conf", []), data.get("text", []))
+                if float(c) >= 0 and str(t).strip()
+            ]
+            if confs:
+                mean_conf = float(np.mean(confs)) / 100.0
+        except Exception as conf_err:
+            logger.debug("Could not compute Tesseract confidence for page %d of '%s': %s", page_label, filename, conf_err)
 
         return Document(
             page_content=page_text,
@@ -288,9 +323,10 @@ class PDFOCRPipeline:
                 "filename": filename,
                 "page_number": page_label,
                 "section": detect_section(page_text),
-                "parser_used": "easyocr",
+                "parser_used": "tesseract",
                 "is_ocr": True,
                 "document_type": "pdf_scanned",
                 "ocr_confidence": round(mean_conf, 4),
             },
         )
+

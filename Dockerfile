@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     poppler-utils \
     tesseract-ocr \
+    tesseract-ocr-eng \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -22,7 +23,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# Install CPU-only PyTorch first to prevent downloading 2GB+ of unnecessary NVIDIA/CUDA drivers
+# Install CPU-only PyTorch first (if required by downstream dependencies) to prevent downloading heavy CUDA drivers
 RUN pip install --no-cache-dir torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining Python dependencies

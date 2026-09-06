@@ -1,11 +1,11 @@
 # 🧠 CogniSphere - AI Multimedia Knowledge Assistant
 
-A production-ready Retrieval-Augmented Generation (RAG) assistant capable of understanding multimedia content using **Streamlit + FastAPI + LangGraph + SQLite + Qdrant + Faster-Whisper + EasyOCR**.
+A production-ready Retrieval-Augmented Generation (RAG) assistant capable of understanding multimedia content using **Streamlit + FastAPI + LangGraph + SQLite + Qdrant + Faster-Whisper + Tesseract OCR**.
 
 ## Features
 
 - **Multimedia Processing:** Upload and process videos (mp4, mov, mkv, avi, webm), audio (mp3, wav, m4a, flac), and documents (pdf, docx, pptx, txt).
-- **Intelligent PDF Handling:** Uses **Docling** as the primary parser for deep document understanding, with fallback to PyMuPDF and an advanced parallel **EasyOCR** pipeline for scanned/image-based documents.
+- **Intelligent PDF Handling:** Uses **Docling** as the primary parser for deep document understanding, with fallback to PyMuPDF and an advanced parallel **Tesseract OCR** pipeline for scanned/image-based documents.
 - **Audio/Video Transcription:** Automatic, high-quality transcription using Faster-Whisper.
 - **LLM Integration:** Inference powered by **Groq**, using `gpt-oss-120b` as primary and `gpt-oss-20b` as fallback for lightning-fast RAG responses. Orchestrated using **LangGraph**.
 - **Advanced Hybrid Retrieval:** Combines sparse (BM25) and dense (Qdrant) vector search, augmented with **Multi-Query Expansion** and **Cohere CrossEncoder Reranking** for high-precision semantic retrieval. Uses **Google Gemini Embeddings** for dense vectors.
@@ -16,6 +16,7 @@ A production-ready Retrieval-Augmented Generation (RAG) assistant capable of und
 
 - Python 3.10+
 - FFmpeg (required for video/audio processing)
+- Tesseract OCR (required for scanned document text extraction)
 
 ## Setup
 
@@ -29,7 +30,6 @@ cd AI_Multimedia_Assistant
 ```bash
 pip install -r requirements.txt
 ```
-*(Note: Installing PyTorch and EasyOCR may take some time depending on your internet connection)*
 
 3. **Configure environment:**
 ```bash
@@ -53,7 +53,7 @@ flowchart TD
     subgraph "Processing Pipeline"
         AV("🎵 Audio/Video<br>Faster-Whisper")
         Doc("📄 Document Parsing<br>Docling / PyMuPDF")
-        Scan("📸 Scanned PDF<br>Parallel EasyOCR")
+        Scan("📸 Scanned PDF<br>Tesseract OCR")
     end
     
     Chunking("✂️ RecursiveCharacter<br>TextSplitter<br>+ Metadata Enrichment")

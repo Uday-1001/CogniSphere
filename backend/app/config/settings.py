@@ -29,17 +29,23 @@ class Settings(BaseSettings):
     
     FRONTEND_PORT: int = Field(default=8501)
 
-    OCR_ENGINE: str = Field(default="gemini")
+    OCR_ENGINE: str = Field(default="tesseract")
     OCR_MODEL_NAME: str = Field(default="gemini-3.6-flash")
 
     OCR_DPI: int = Field(default=200)
-    OCR_LANGUAGE: str = Field(default="en")
+    OCR_LANGUAGE: str = Field(default="eng")
     OCR_SCANNED_CHAR_THRESHOLD: int = Field(default=10)
     OCR_MAX_WORKERS: int = Field(default=1)
 
     OCR_MAX_PX: int = Field(default=1600)
     OCR_CONTRAST_FACTOR: float = Field(default=1.5)
 
+    # Tesseract configuration
+    OCR_PSM: int = Field(default=3)
+    OCR_OEM: int = Field(default=3)
+    TESSERACT_CMD: Optional[str] = Field(default=None)
+
+    # Legacy OCR settings preserved for backwards compatibility
     OCR_DECODER: str = Field(default="greedy")
     OCR_BEAM_WIDTH: int = Field(default=3)
     OCR_BATCH_SIZE: int = Field(default=1)

@@ -225,7 +225,7 @@ class IngestionService:
         filename = os.path.basename(file_path)
 
         if is_scanned_pdf(file_path, char_threshold=getattr(settings, "OCR_SCANNED_CHAR_THRESHOLD", 10)):
-            logger.info("'%s' is scanned (0 text layer) — routing to EasyOCR.", filename)
+            logger.info("'%s' is scanned (0 text layer) — routing to Tesseract OCR.", filename)
             ocr_pipe = get_ocr_pipeline()
             if ocr_pipe is not None:
                 return ocr_pipe.process(file_path, filename, progress_callback)
@@ -405,7 +405,7 @@ class IngestionService:
         ocr_pipe = get_ocr_pipeline()
         if ocr_pipe is None:
             raise RuntimeError(
-                "OCR is required for this file but EasyOCR / PyMuPDF failed to initialize."
+                "OCR is required for this file but Tesseract OCR / PyMuPDF failed to initialize."
             )
         filename = os.path.basename(file_path)
         return ocr_pipe.process(file_path, filename, progress_callback)
