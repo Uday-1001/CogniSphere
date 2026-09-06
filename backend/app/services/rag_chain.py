@@ -366,15 +366,25 @@ class RAGChainService:
                 "\n\n---\n"
                 "_🔄 Just so you know — our primary AI assistant had a small hiccup, "
                 "so a backup assistant stepped in and answered this for you. "
-                "The answer is just as accurate — you might not even notice the difference!_"
             )
 
         contexts = [doc.page_content for doc in final_state.get("documents", [])]
 
+        _NO_INFO_PHRASES = (
+            "i don't have enough information",
+            "i do not have enough information",
+            "no relevant information was found",
+        )
+        sources = final_state.get("sources", [])
+        timestamps = final_state.get("timestamps", [])
+        if any(phrase in answer.lower() for phrase in _NO_INFO_PHRASES):
+            sources = []
+            timestamps = []
+
         return {
             "answer": answer + provider_note,
-            "sources": final_state.get("sources", []),
-            "timestamps": final_state.get("timestamps", []),
+            "sources": sources,
+            "timestamps": timestamps,
             "context_used": (final_state.get("context") or "")[:500],
             "contexts": contexts,
             "provider_used": provider_used,
