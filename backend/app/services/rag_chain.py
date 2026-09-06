@@ -138,7 +138,6 @@ class RAGChainService:
         logger.info("Expanded queries for retrieval: %s", expanded_queries)
         return {"expanded_queries": expanded_queries}
 
-    # Retrieve Node Of Graph
     def retrieve_node(self, state: RAGState) -> Dict[str, Any]:
         queries = state.get("expanded_queries") or [state["query"]]
         file_id: Optional[int] = state.get("file_id")
@@ -163,6 +162,19 @@ class RAGChainService:
                     if doc.page_content not in seen_contents:
                         seen_contents.add(doc.page_content)
                         merged_docs.append(doc)
+
+        if file_id is not None:
+            target_id = str(file_id)
+            before = len(merged_docs)
+            merged_docs = [
+                d for d in merged_docs
+                if str(d.metadata.get("document_id", "")) == target_id
+            ]
+            if len(merged_docs) < before:
+                logger.debug(
+                    "Knowledge Focus safety filter: removed %d out-of-scope chunks (kept %d for document_id=%s)",
+                    before - len(merged_docs), len(merged_docs), target_id,
+                )
 
         documents = merged_docs[:number_of_results]
         documents.sort(key=lambda d: d.metadata.get("chunk_number", 0))
@@ -195,6 +207,18 @@ class RAGChainService:
         ]
 
         format_instruction: str = detect_format_instruction(state["query"])
+
+        if file_id is not None and documents:
+            focused_filename = documents[0].metadata.get("filename", "the selected document")
+            scope_note = (
+                f"\n\n[KNOWLEDGE FOCUS ACTIVE] You are currently in single-document mode. "
+                f"The user has selected '{focused_filename}' as their knowledge source. "
+                f"You MUST answer EXCLUSIVELY from the context chunks retrieved from this document. "
+                f"Do NOT use any information from other documents or from your general training knowledge. "
+                f"If the answer is not present in the provided context, respond exactly: "
+                f"'I don't have enough information in the selected document to answer this question.'"
+            )
+            format_instruction = format_instruction + scope_note
 
         return {
             "documents": documents,
