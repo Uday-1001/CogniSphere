@@ -29,8 +29,9 @@ RUN pip install --no-cache-dir torch torchvision --extra-index-url https://downl
 # Install remaining Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend source files
+# Copy backend and frontend source files
 COPY backend ./backend
+COPY frontend ./frontend
 
 # Create required storage directories
 RUN mkdir -p /app/backend/storage/uploads \
@@ -40,7 +41,4 @@ RUN mkdir -p /app/backend/storage/uploads \
 
 EXPOSE 8000
 
-# Set working directory to backend so relative app imports work seamlessly
-WORKDIR /app/backend
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

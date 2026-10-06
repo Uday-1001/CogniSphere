@@ -1,7 +1,9 @@
+import os
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from .api import upload, chat, history, health
 from .database.connection import init_db, SessionLocal
 from .database.models import UploadedFile
@@ -128,4 +130,9 @@ app.include_router(health.router)
 app.include_router(upload.router)
 app.include_router(chat.router)
 app.include_router(history.router)
+
+frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
+if os.path.exists(frontend_dir):
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+
 

@@ -1,6 +1,6 @@
 # 🧠 CogniSphere - AI Multimedia Knowledge Assistant
 
-A production-ready Retrieval-Augmented Generation (RAG) assistant capable of understanding multimedia content using **Streamlit + FastAPI + LangGraph + SQLite + Qdrant + Faster-Whisper + Tesseract OCR**.
+A production-ready Retrieval-Augmented Generation (RAG) assistant capable of understanding multimedia content using **HTML/CSS/JS + FastAPI + LangGraph + SQLite + Qdrant + Faster-Whisper + Tesseract OCR**.
 
 ## Features
 
@@ -9,7 +9,7 @@ A production-ready Retrieval-Augmented Generation (RAG) assistant capable of und
 - **Audio/Video Transcription:** Automatic, high-quality transcription using Faster-Whisper.
 - **LLM Integration:** Inference powered by **Groq**, using `gpt-oss-120b` as primary and `gpt-oss-20b` as fallback for lightning-fast RAG responses. Orchestrated using **LangGraph**.
 - **Advanced Hybrid Retrieval:** Combines sparse (BM25) and dense (Qdrant) vector search, augmented with **Multi-Query Expansion** and **Cohere CrossEncoder Reranking** for high-precision semantic retrieval. Uses **Google Gemini Embeddings** for dense vectors.
-- **Modern UI:** A sleek, fully-featured dark-mode Streamlit frontend featuring a custom `ui_enhancer.py` with 3D flip cards, glassmorphism timeline steps, prompt pills, and real-time processing statistics.
+- **Modern Web UI:** A fast, native HTML5, CSS3 & JavaScript frontend serving index, chat, upload, and library pages with fluid animations, sound effects, and real-time processing statistics.
 - **Rich Citations:** Natural language Q&A with exact source citations and timestamp references for multimedia.
 
 ## Prerequisites
@@ -23,7 +23,7 @@ A production-ready Retrieval-Augmented Generation (RAG) assistant capable of und
 1. **Clone the repository:**
 ```bash
 git clone <repository-url>
-cd AI_Multimedia_Assistant
+cd CogniSphere
 ```
 
 2. **Install dependencies:**
@@ -34,12 +34,12 @@ pip install -r requirements.txt
 3. **Configure environment:**
 ```bash
 cp .env.example .env
-# Edit .env with your API keys (Groq)
+# Edit .env with your API keys (Groq, Google, Cohere)
 ```
 
-4. **Create necessary directories:**
+4. **Create required storage directories:**
 ```bash
-mkdir -p storage/uploads storage/transcripts storage/temp storage/qdrant
+mkdir -p backend/storage/uploads backend/storage/transcripts backend/storage/temp backend/storage/qdrant
 ```
 
 ## Architecture Flow
@@ -47,7 +47,7 @@ mkdir -p storage/uploads storage/transcripts storage/temp storage/qdrant
 ```mermaid
 flowchart TD
     %% Nodes
-    UI("💻 Streamlit Frontend")
+    UI("💻 Web Frontend (HTML/CSS/JS)")
     API{"⚡ REST API (FastAPI)"}
     
     subgraph "Processing Pipeline"
@@ -101,25 +101,22 @@ flowchart TD
     Out -->|Return Response| UI
 ```
 
-## Running the Application
+## Running Locally
 
-### Backend (FastAPI)
-The backend handles all heavy lifting: chunking, OCR, embeddings, and LLM querying.
+### Backend & Web Server (FastAPI)
+Run the FastAPI application server:
 ```bash
-cd backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Frontend (Streamlit)
-The frontend provides the conversational UI and dashboard.
-```bash
-cd frontend
-streamlit run Home.py
+Once running, open your browser and navigate to:
+```
+http://127.0.0.1:8000  (or http://localhost:8000)
 ```
 
 ## Configuration (.env)
 
-Here is a sample of the key configuration variables:
+Sample of key configuration variables:
 
 ```env
 # Database
@@ -147,8 +144,27 @@ WHISPER_DEVICE=cpu
 
 ## Usage
 
-1. Start both backend and frontend servers.
+1. Start the FastAPI server.
 2. Navigate to the **Upload** page in the sidebar and add multimedia files.
 3. Wait for the automatic processing, transcription, and OCR to complete.
 4. Go to the **Chat** page to ask questions about your documents and media.
-5. View system statistics on the **Home** dashboard or previous conversations on the **History** page.
+5. View system status on the **Home** dashboard or previous conversations on the **Library** page.
+
+## Deploying on Render
+
+### Option A: Native Python Web Service
+1. Create a new **Web Service** on Render connected to your repository.
+2. Set configuration:
+   - **Environment**: `Python 3`
+   - **Build Command**:
+     ```bash
+     pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu && pip install -r requirements.txt
+     ```
+   - **Start Command**:
+     ```bash
+     uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+     ```
+3. Configure Environment Variables (`GROQ_API_KEY`, `GOOGLE_API_KEY`, `COHERE_API_KEY`) in the Render dashboard.
+
+### Option B: Render Blueprint (`render.yaml`) or Docker
+Render automatically detects `render.yaml` or `Dockerfile` in the root of the repository. Simply select **New > Blueprint** on Render.
