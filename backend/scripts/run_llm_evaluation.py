@@ -1,4 +1,6 @@
+import io
 import os
+import re
 import sys
 import json
 import csv
@@ -6,10 +8,10 @@ import time
 from typing import List, Dict
 
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+if isinstance(sys.stdout, io.TextIOWrapper) and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
-# Ensure we can import from backend
+                                   
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.app.services.rag_chain import rag_chain_service
@@ -22,7 +24,7 @@ QUESTIONS_FILE = r"C:\Users\uday raj nkashyap\.gemini\antigravity-ide\brain\91a9
 OUTPUT_CSV = "rag_llm_evaluation.csv"
 EVALUATOR_MODEL = "gemini-3.6-flash"
 
-# Evaluation Prompt
+                   
 EVAL_PROMPT = """
 You are an expert evaluator for a Retrieval-Augmented Generation (RAG) system.
 You will be given a Question, the Generated Answer, and the Retrieved Contexts (chunks).
@@ -78,7 +80,7 @@ def main():
         print(f"Question: {question}")
 
         start_time = time.time()
-        # Query the RAG pipeline
+                                
         response_obj = rag_chain_service.invoke(question)
         rag_latency = time.time() - start_time
         
@@ -91,8 +93,9 @@ def main():
             
         print(f"Retrieved {len(contexts)} chunks. Latency: {rag_latency:.2f}s")
         
-        # Call the Evaluator LLM
+                                
         eval_result = {}
+        eval_response = None
         try:
             eval_response = eval_chain.invoke({
                 "question": question,
@@ -102,7 +105,6 @@ def main():
             
             eval_response = eval_response.strip()
 
-            import re
             json_match = re.search(r'\{.*\}', eval_response, re.DOTALL)
             if json_match:
                 json_str = json_match.group(0)
@@ -147,7 +149,7 @@ def main():
                     print(f"Fallback evaluation also failed: {fallback_e}")
                     faithfulness, recall, correctness, feedback = 0.0, 0.0, 0.0, f"Error: {str(e)}"
             else:
-                safe_resp = eval_response.encode('ascii', 'replace').decode('ascii') if 'eval_response' in locals() else 'None'
+                safe_resp = eval_response.encode('ascii', 'replace').decode('ascii') if eval_response is not None else 'None'
                 print(f"Raw output was: {safe_resp}")
                 faithfulness, recall, correctness, feedback = 0.0, 0.0, 0.0, f"Error: {str(e)}"
             
@@ -166,7 +168,7 @@ def main():
         print("Waiting 30 seconds to respect API rate limits...")
         time.sleep(15)
 
-    # Save to CSV
+                 
     if results:
         fieldnames = list(results[0].keys())
         with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:

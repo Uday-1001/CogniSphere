@@ -7,6 +7,8 @@ from ..database.connection import get_db
 from ..database.models import ChatSession, UploadedFile
 from datetime import datetime
 from sqlalchemy import text
+from .deps import get_tenant_id
+from ..config.settings import settings
 
 router = APIRouter(prefix="/history", tags=["history"])
 
@@ -39,12 +41,20 @@ class DocumentResponse(BaseModel):
 
 
 @router.get("/sessions", response_model=List[ChatHistoryResponse])
-async def get_chat_sessions(db=Depends(get_db)):
+async def get_chat_sessions(
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
     from sqlalchemy.orm import selectinload
-    
-    chat_sessions = db.query(ChatSession).options(
+
+    sessions_query = db.query(ChatSession).options(
         selectinload(ChatSession.messages)
-    ).order_by(
+    )
+                                                               
+    if tenant_id is not None:
+        sessions_query = sessions_query.filter(ChatSession.tenant_id == tenant_id)
+
+    chat_sessions = sessions_query.order_by(
         ChatSession.created_at.desc()
     ).limit(20).all()
 
@@ -70,9 +80,15 @@ async def get_chat_sessions(db=Depends(get_db)):
 
 
 @router.get("/documents", response_model=List[DocumentResponse])
-async def get_documents(db=Depends(get_db)):
-    documents = db.query(UploadedFile).order_by(
-        UploadedFile.created_at.desc()).limit(50).all()
+async def get_documents(
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
+    docs_query = db.query(UploadedFile)
+    if tenant_id is not None:
+        docs_query = docs_query.filter(UploadedFile.tenant_id == tenant_id)
+
+    documents = docs_query.order_by(UploadedFile.created_at.desc()).limit(50).all()
 
     res = [DocumentResponse(
         id=document.id,
@@ -88,9 +104,15 @@ async def get_documents(db=Depends(get_db)):
 
 
 @router.delete("/document/{file_id}")
-async def delete_document(file_id: int, db=Depends(get_db)):
-    database_file_record = db.query(UploadedFile).filter(
-        UploadedFile.id == file_id).first()
+async def delete_document(
+    file_id: int,
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
+    file_query = db.query(UploadedFile).filter(UploadedFile.id == file_id)
+    if tenant_id is not None:
+        file_query = file_query.filter(UploadedFile.tenant_id == tenant_id)
+    database_file_record = file_query.first()
     if not database_file_record:
         raise HTTPException(
             status_code=404,
@@ -112,15 +134,19 @@ async def delete_document(file_id: int, db=Depends(get_db)):
 
     from ..vectorstore.qdrant import qdrant_service
     try:
-        qdrant_service.delete(where={"document_id": str(file_id)})
+        qdrant_where: dict = {"document_id": str(file_id)}
+        if tenant_id is not None:
+            qdrant_where["tenant_id"] = str(tenant_id)
+        qdrant_service.delete(where=qdrant_where)
     except Exception:
         pass
 
     db.delete(database_file_record)
-    try:
-        db.execute(text("UPDATE sqlite_sequence SET seq = (SELECT COALESCE(MAX(id), 0) FROM uploaded_files) WHERE name = 'uploaded_files'"))
-    except Exception:
-        pass
+    if settings.DATABASE_URL.startswith("sqlite"):
+        try:
+            db.execute(text("UPDATE sqlite_sequence SET seq = (SELECT COALESCE(MAX(id), 0) FROM uploaded_files) WHERE name = 'uploaded_files'"))
+        except Exception:
+            pass
     db.commit()
 
     gc.collect()
@@ -128,12 +154,19 @@ async def delete_document(file_id: int, db=Depends(get_db)):
 
 
 @router.delete("/documents/bulk")
-async def bulk_delete_documents(request: BulkDeleteRequest, db=Depends(get_db)):
+async def bulk_delete_documents(
+    request: BulkDeleteRequest,
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
     deleted_ids = []
     from ..vectorstore.qdrant import qdrant_service
-    
+
     for file_id in request.file_ids:
-        database_file_record = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+        file_query = db.query(UploadedFile).filter(UploadedFile.id == file_id)
+        if tenant_id is not None:
+            file_query = file_query.filter(UploadedFile.tenant_id == tenant_id)
+        database_file_record = file_query.first()
         if not database_file_record:
             continue
             
@@ -150,7 +183,10 @@ async def bulk_delete_documents(request: BulkDeleteRequest, db=Depends(get_db)):
                 pass
 
         try:
-            qdrant_service.delete(where={"document_id": str(file_id)})
+            qdrant_where: dict = {"document_id": str(file_id)}
+            if tenant_id is not None:
+                qdrant_where["tenant_id"] = str(tenant_id)
+            qdrant_service.delete(where=qdrant_where)
         except Exception:
             pass
 
@@ -158,10 +194,11 @@ async def bulk_delete_documents(request: BulkDeleteRequest, db=Depends(get_db)):
         deleted_ids.append(file_id)
 
     if deleted_ids:
-        try:
-            db.execute(text("UPDATE sqlite_sequence SET seq = (SELECT COALESCE(MAX(id), 0) FROM uploaded_files) WHERE name = 'uploaded_files'"))
-        except Exception:
-            pass
+        if settings.DATABASE_URL.startswith("sqlite"):
+            try:
+                db.execute(text("UPDATE sqlite_sequence SET seq = (SELECT COALESCE(MAX(id), 0) FROM uploaded_files) WHERE name = 'uploaded_files'"))
+            except Exception:
+                pass
         db.commit()
 
     gc.collect()

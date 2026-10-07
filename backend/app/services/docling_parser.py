@@ -80,9 +80,9 @@ def parse_with_docling(file_path: str) -> List[Document]:
                     item_prov = getattr(item, "prov", [])
                     if any(getattr(p, "page_no", None) == page.page_no for p in item_prov):
                         if hasattr(item, "export_to_markdown"):
-                            chunk = item.export_to_markdown() # type: ignore
+                            chunk = item.export_to_markdown()               
                         elif hasattr(item, "text"):
-                            chunk = item.text # type: ignore
+                            chunk = item.text               
                         else:
                             continue
                         if chunk and chunk.strip():

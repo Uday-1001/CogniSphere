@@ -17,7 +17,7 @@ except ImportError:
     from ..config.settings import settings
 
 try:
-    # pyrefly: ignore [missing-import]
+                                      
     import google.generativeai as genai
 except ImportError:
     genai = None
@@ -201,7 +201,7 @@ class PDFOCRPipeline:
         global genai
         if genai is None:
             try:
-                # pyrefly: ignore [missing-import]
+                                                  
                 import google.generativeai as genai
             except ImportError:
                 logger.error("google.generativeai not installed for Gemini Cloud OCR.")

@@ -13,7 +13,7 @@ class EmbeddingService:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    # Generating the embeddings 
+                                
     def get_embeddings(self) -> Embeddings:
         if self._embeddings is None:
             if settings.EMBEDDING_PROVIDER == "google":

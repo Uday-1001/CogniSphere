@@ -1,11 +1,14 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any, TypedDict
+from typing import List, Optional, Dict, Any, TypedDict, cast
+import gc
 import os
 import uuid
 import shutil
 import logging
+import threading
+import time
 from langgraph.graph import StateGraph, END
 from ..database.connection import get_db, SessionLocal
 from ..database.models import UploadedFile
@@ -15,6 +18,7 @@ from ..services.ingestion import ingestion_service
 from ..services.embeddings import embedding_service
 from ..vectorstore.qdrant import qdrant_service
 from ..config.settings import settings
+from .deps import get_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +56,8 @@ class IngestionState(TypedDict, total=False):
     file_path: str
     filename: str
     file_type: str
+
+    tenant_id: Optional[int]
     transcript_path: Optional[str]
     segment_timestamps: Optional[List[Dict]]
     documents: List[Any]
@@ -131,6 +137,7 @@ def load_documents(state: IngestionState) -> Dict[str, Any]:
 
 def index_node(state: IngestionState) -> Dict[str, Any]:
     file_id = state["file_id"]
+    tenant_id = state.get("tenant_id")
     documents = state.get("documents") or []
 
     try:
@@ -139,6 +146,10 @@ def index_node(state: IngestionState) -> Dict[str, Any]:
         texts = [doc.page_content for doc in documents]
         metadatas = [doc.metadata for doc in documents]
         ids = [str(uuid.uuid4()) for _ in documents]
+
+        if tenant_id is not None:
+            for m in metadatas:
+                m["tenant_id"] = str(tenant_id)
 
         if qdrant_service.vectorstore is None:
             qdrant_service.initialize(embedding_service.get_embeddings())
@@ -192,9 +203,6 @@ def build_ingestion_graph():
 
 ingestion_graph = build_ingestion_graph()
 
-import threading
-import time
-
 def _simulate_progress(file_id: int):
     while True:
         progress = processing_progress.get(file_id)
@@ -217,6 +225,7 @@ def run_file_processing(file_id: int) -> None:
             "file_path": str(record.file_path),
             "filename": str(record.original_filename),
             "file_type": str(record.file_type),
+            "tenant_id": cast(int, record.tenant_id) if record.tenant_id is not None else None,
         }
 
         threading.Thread(target=_simulate_progress, args=(file_id,), daemon=True).start()
@@ -226,24 +235,23 @@ def run_file_processing(file_id: int) -> None:
         if final_state.get("error"):
             raise Exception(final_state["error"])
 
-        if final_state.get("transcript_path"):
-            record.transcript_path = final_state["transcript_path"]
-        # pyrefly: ignore [bad-assignment]
-        record.status = "processed"
-        # pyrefly: ignore [bad-assignment]
-        record.processing_error = None
-        db.commit()
+        if record is not None:
+            if final_state.get("transcript_path"):
+                record.transcript_path = final_state["transcript_path"]  # type: ignore[assignment]
+
+            record.status = "processed"           # type: ignore[assignment]
+            record.processing_error = None         # type: ignore[assignment]
+            db.commit()
         update_progress(file_id, 100, 100, "Done", False, status="processed")
 
     except Exception as processing_error:
         db.rollback()
         record = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
         if record:
-            # We keep the record but mark it as an error
-            record.status = "error" # type: ignore
-            record.processing_error = str(processing_error) # type: ignore
+            record.status = "error"                          # type: ignore[assignment]
+            record.processing_error = str(processing_error)  # type: ignore[assignment]
             db.commit()
-            
+
             if record.file_path and os.path.exists(str(record.file_path)):
                 try:
                     os.remove(str(record.file_path))
@@ -256,7 +264,6 @@ def run_file_processing(file_id: int) -> None:
         }
     finally:
         db.close()
-        import gc
         gc.collect()
 
 
@@ -264,6 +271,7 @@ def run_file_processing(file_id: int) -> None:
 async def upload_file(
     file: UploadFile = File(...),
     db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
 ):
     filename = file.filename or "unknown"
     file_type = ingestion_service.get_file_type(filename)
@@ -291,6 +299,7 @@ async def upload_file(
         file_size=file_size,
         file_path=save_path,
         status="uploaded",
+        tenant_id=tenant_id,
     )
     db.add(database_file_record)
     db.commit()
@@ -310,8 +319,12 @@ async def process_file(
     file_id: int,
     background_tasks: BackgroundTasks,
     db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
 ):
-    database_file_record = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+    file_query = db.query(UploadedFile).filter(UploadedFile.id == file_id)
+    if tenant_id is not None:
+        file_query = file_query.filter(UploadedFile.tenant_id == tenant_id)
+    database_file_record = file_query.first()
     if not database_file_record:
         raise HTTPException(
             status_code=404,
@@ -335,7 +348,7 @@ async def process_file(
         "status": "processing", "message": "Starting...",
     }
 
-    # type: ignore
+
     background_tasks.add_task(run_file_processing, file_id)
 
     return UploadResponse(
@@ -348,7 +361,11 @@ async def process_file(
 
 
 @router.get("/{file_id}/status", response_model=ProgressResponse)
-async def get_process_status(file_id: int, db=Depends(get_db)):
+async def get_process_status(
+    file_id: int,
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
     progress = processing_progress.get(file_id)
     if progress:
         return ProgressResponse(
@@ -359,7 +376,10 @@ async def get_process_status(file_id: int, db=Depends(get_db)):
             message=progress.get("message", "Processing..."),
         )
 
-    database_file_record = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+    file_query = db.query(UploadedFile).filter(UploadedFile.id == file_id)
+    if tenant_id is not None:
+        file_query = file_query.filter(UploadedFile.tenant_id == tenant_id)
+    database_file_record = file_query.first()
     if not database_file_record:
         return ProgressResponse(
             file_id=file_id, status="processing",
@@ -389,8 +409,15 @@ async def get_process_status(file_id: int, db=Depends(get_db)):
 
 
 @router.get("/{file_id}/view")
-async def view_uploaded_file(file_id: int, db=Depends(get_db)):
-    database_file_record = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+async def view_uploaded_file(
+    file_id: int,
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
+    file_query = db.query(UploadedFile).filter(UploadedFile.id == file_id)
+    if tenant_id is not None:
+        file_query = file_query.filter(UploadedFile.tenant_id == tenant_id)
+    database_file_record = file_query.first()
     if not database_file_record:
         raise HTTPException(status_code=404, detail="We couldn't locate that file.")
     if not os.path.exists(database_file_record.file_path):

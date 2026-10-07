@@ -40,12 +40,12 @@ class Settings(BaseSettings):
     OCR_MAX_PX: int = Field(default=1600)
     OCR_CONTRAST_FACTOR: float = Field(default=1.5)
 
-    # Tesseract configuration
+                             
     OCR_PSM: int = Field(default=3)
     OCR_OEM: int = Field(default=3)
     TESSERACT_CMD: Optional[str] = Field(default=None)
 
-    # Legacy OCR settings preserved for backwards compatibility
+                                                               
     OCR_DECODER: str = Field(default="greedy")
     OCR_BEAM_WIDTH: int = Field(default=3)
     OCR_BATCH_SIZE: int = Field(default=1)

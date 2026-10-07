@@ -44,12 +44,19 @@ class QdrantService:
     def _create_payload_indexes(self, client: QdrantClient):
         try:
             from qdrant_client.models import PayloadSchemaType
+
             client.create_payload_index(
                 collection_name=settings.QDRANT_COLLECTION_NAME,
                 field_name="metadata.document_id",
                 field_schema=PayloadSchemaType.KEYWORD,
             )
-            logger.info("Ensured KEYWORD payload index for 'metadata.document_id'")
+
+            client.create_payload_index(
+                collection_name=settings.QDRANT_COLLECTION_NAME,
+                field_name="metadata.tenant_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+            logger.info("Ensured KEYWORD payload indexes for 'metadata.document_id' and 'metadata.tenant_id'")
         except Exception as idx_err:
             logger.debug("Payload index creation notice: %s", idx_err)
 
@@ -134,15 +141,33 @@ class QdrantService:
             self.vectorstore.add_texts(texts=batch_texts, metadatas=batch_metadatas, ids=batch_ids)
         gc.collect()
 
-    def similarity_search(self, query: str, k: int = 4):
+    def similarity_search(self, query: str, k: int = 4, tenant_id: Optional[str] = None):
         if self.vectorstore is None:
             raise ValueError("Vectorstore not initialized and failed to auto-initialize.")
+        tenant_filter = self._build_tenant_filter(tenant_id)
+        if tenant_filter:
+            return self.vectorstore.similarity_search(query=query, k=k, filter=tenant_filter)
         return self.vectorstore.similarity_search(query=query, k=k)
 
-    def similarity_search_with_score(self, query: str, k: int = 4):
+    def similarity_search_with_score(self, query: str, k: int = 4, tenant_id: Optional[str] = None):
         if self.vectorstore is None:
             raise ValueError("Vectorstore not initialized and failed to auto-initialize.")
+        tenant_filter = self._build_tenant_filter(tenant_id)
+        if tenant_filter:
+            return self.vectorstore.similarity_search_with_score(query=query, k=k, filter=tenant_filter)
         return self.vectorstore.similarity_search_with_score(query=query, k=k)
+
+    def _build_tenant_filter(self, tenant_id: Optional[str]) -> Optional[Filter]:
+        if not tenant_id:
+            return None
+        return Filter(
+            must=[
+                FieldCondition(
+                    key="metadata.tenant_id",
+                    match=MatchValue(value=str(tenant_id)),
+                )
+            ]
+        )
 
     def delete(self, ids: Optional[List[str]] = None, where: Optional[dict] = None):
         client = self.get_client()
@@ -150,7 +175,7 @@ class QdrantService:
             if ids:
                 client.delete(
                     collection_name=settings.QDRANT_COLLECTION_NAME,
-                    points_selector=PointIdsList(points=ids), # type: ignore
+                    points_selector=PointIdsList(points=ids),
                 )
             elif where:
                 conditions = [
@@ -159,7 +184,7 @@ class QdrantService:
                 ]
                 client.delete(
                     collection_name=settings.QDRANT_COLLECTION_NAME,
-                    points_selector=Filter(must=conditions), # type: ignore
+                    points_selector=Filter(must=conditions),
                 )
         except Exception as exc:
             logger.warning("Qdrant delete skipped or failed (collection may not exist yet): %s", exc)

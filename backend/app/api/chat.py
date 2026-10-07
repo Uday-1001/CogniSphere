@@ -4,6 +4,7 @@ from typing import List, Optional
 from ..database.connection import get_db
 from ..database.models import ChatSession, ChatMessage
 from ..services.rag_chain import rag_chain_service
+from .deps import get_tenant_id
 import uuid
 import logging
 import ast
@@ -32,18 +33,27 @@ class EndSessionRequest(BaseModel):
 
 
 @router.post("/", response_model=ChatResponse)
-async def chat(request: ChatRequest, db=Depends(get_db)):
+async def chat(
+    request: ChatRequest,
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
     session_id = request.session_id
 
     if not session_id:
-        session = ChatSession(title=f"Session {uuid.uuid4().hex[:8]}")
+        session = ChatSession(
+            title=f"Session {uuid.uuid4().hex[:8]}",
+            tenant_id=tenant_id,
+        )
         db.add(session)
         db.commit()
         db.refresh(session)
         session_id = session.id
-
-    session = db.query(ChatSession).filter(
-        ChatSession.id == session_id).first()
+                     
+    session_query = db.query(ChatSession).filter(ChatSession.id == session_id)
+    if tenant_id is not None:
+        session_query = session_query.filter(ChatSession.tenant_id == tenant_id)
+    session = session_query.first()
     if not session:
         raise HTTPException(
             status_code=404,
@@ -52,13 +62,14 @@ async def chat(request: ChatRequest, db=Depends(get_db)):
     user_message = ChatMessage(
         session_id=session_id,
         role="user",
-        content=request.question
+        content=request.question,
+        tenant_id=tenant_id,
     )
     db.add(user_message)
     db.commit()
 
     try:
-        result = rag_chain_service.invoke(request.question, request.file_id)
+        result = rag_chain_service.invoke(request.question, request.file_id, tenant_id=tenant_id)
     except RuntimeError as all_providers_failed:
         logger.error("All LLM providers exhausted: %s", all_providers_failed)
         raise HTTPException(
@@ -78,24 +89,32 @@ async def chat(request: ChatRequest, db=Depends(get_db)):
         role="assistant",
         content=result["answer"],
         sources=str(result.get("sources", [])),
-        timestamp_references=str(result.get("timestamps", []))
+        timestamp_references=str(result.get("timestamps", [])),
+        tenant_id=tenant_id,
     )
     db.add(assistant_message)
     db.commit()
 
+    assert isinstance(session_id, int)
     return ChatResponse(
         answer=result["answer"],
         sources=result.get("sources", []),
         timestamps=result.get("timestamps", []),
-        session_id=int(session_id), # type: ignore
+        session_id=session_id,               
         provider_used=result.get("provider_used"),
     )
 
 
 @router.post("/end-session")
-async def end_session(request: EndSessionRequest, db=Depends(get_db)):
-    session = db.query(ChatSession).filter(
-        ChatSession.id == request.session_id).first()
+async def end_session(
+    request: EndSessionRequest,
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
+    session_query = db.query(ChatSession).filter(ChatSession.id == request.session_id)
+    if tenant_id is not None:
+        session_query = session_query.filter(ChatSession.tenant_id == tenant_id)
+    session = session_query.first()
     if not session:
         raise HTTPException(
             status_code=404,
@@ -104,7 +123,10 @@ async def end_session(request: EndSessionRequest, db=Depends(get_db)):
     session.is_active = False
     db.commit()
 
-    new_session = ChatSession(title=f"Session {uuid.uuid4().hex[:8]}")
+    new_session = ChatSession(
+        title=f"Session {uuid.uuid4().hex[:8]}",
+        tenant_id=tenant_id,
+    )
     db.add(new_session)
     db.commit()
     db.refresh(new_session)
@@ -117,12 +139,22 @@ async def end_session(request: EndSessionRequest, db=Depends(get_db)):
 
 
 @router.get("/{session_id}/history")
-async def get_chat_history(session_id: int, db=Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+async def get_chat_history(
+    session_id: int,
+    db=Depends(get_db),
+    tenant_id: Optional[int] = Depends(get_tenant_id),
+):
+    session_query = db.query(ChatSession).filter(ChatSession.id == session_id)
+    if tenant_id is not None:
+        session_query = session_query.filter(ChatSession.tenant_id == tenant_id)
+    session = session_query.first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at).all()
+    messages_query = db.query(ChatMessage).filter(ChatMessage.session_id == session_id)
+    if tenant_id is not None:
+        messages_query = messages_query.filter(ChatMessage.tenant_id == tenant_id)
+    messages = messages_query.order_by(ChatMessage.created_at).all()
     
     history = []
     for msg in messages:

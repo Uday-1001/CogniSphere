@@ -36,18 +36,28 @@ class RetrievalService:
         self,
         search_k: int = 4,
         filter_by_file_id: Optional[int] = None,
+        tenant_id: Optional[int] = None,
     ):
         from qdrant_client import models
-        where_clause = None
+        filter_conditions = []
+
         if filter_by_file_id is not None:
-            where_clause = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="metadata.document_id",
-                        match=models.MatchValue(value=str(filter_by_file_id)),
-                    )
-                ]
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="metadata.document_id",
+                    match=models.MatchValue(value=str(filter_by_file_id)),
+                )
             )
+
+        if tenant_id is not None:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="metadata.tenant_id",
+                    match=models.MatchValue(value=str(tenant_id)),
+                )
+            )
+
+        where_clause = models.Filter(must=filter_conditions) if filter_conditions else None
 
         if qdrant_service.vectorstore is None:
             from .embeddings import embedding_service
@@ -80,10 +90,12 @@ class RetrievalService:
         query: str,
         number_of_results: int = 4,
         filter_by_file_id: Optional[int] = None,
+        tenant_id: Optional[int] = None,
     ) -> List[Document]:
         retriever = self.get_retriever(
             search_k=number_of_results,
             filter_by_file_id=filter_by_file_id,
+            tenant_id=tenant_id,
         )
         return retriever.invoke(query)
 

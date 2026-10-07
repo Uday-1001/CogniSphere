@@ -55,17 +55,16 @@ def detect_format_instruction(query: str) -> str:
 class RAGState(TypedDict, total=False):
     query: str
     file_id: Optional[int]
+    tenant_id: Optional[int]
     expanded_queries: List[str]
     documents: List[Document]
     context: str
     sources: List[str]
     timestamps: List[dict]
     format_instruction: str
-
     providers_to_try: List[str]
     provider_used: Optional[str]
     errors: Annotated[List[str], operator.add]
-
     answer: str
 
 
@@ -78,7 +77,6 @@ class RAGChainService:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    # Create the Models
     def create_model(self, model_name: str) -> ChatGroq:
         return ChatGroq(
             model=model_name,
@@ -105,13 +103,13 @@ class RAGChainService:
 
         if not settings.GROQ_API_KEY:
             raise ValueError("GROQ_API_KEY is not configured in settings.")
-        
+
         model_name = provider
         if provider == "gpt-oss-120b":
             model_name = "openai/gpt-oss-120b"
         elif provider == "gpt-oss-20b":
             model_name = "openai/gpt-oss-20b"
-            
+
         return self.create_model(model_name)
 
     def get_fallback_providers(self) -> List[str]:
@@ -121,7 +119,6 @@ class RAGChainService:
             return ["gemini-3.6-flash"]
         return ["gemini-3.6-flash"]
 
-    #Expand the Query for vaguelessness
     def expand_query_node(self, state: RAGState) -> Dict[str, Any]:
         query = state["query"]
         alternates: List[str] = []
@@ -141,6 +138,7 @@ class RAGChainService:
     def retrieve_node(self, state: RAGState) -> Dict[str, Any]:
         queries = state.get("expanded_queries") or [state["query"]]
         file_id: Optional[int] = state.get("file_id")
+        tenant_id: Optional[int] = state.get("tenant_id")
         number_of_results = 10
 
         results_per_query = []
@@ -149,6 +147,7 @@ class RAGChainService:
                 q,
                 number_of_results=number_of_results,
                 filter_by_file_id=file_id,
+                tenant_id=tenant_id,
             )
             results_per_query.append(docs)
 
@@ -228,7 +227,6 @@ class RAGChainService:
             "format_instruction": format_instruction,
         }
 
-    # Generate Node Of Graph
     def generate_node(self, state: RAGState) -> Dict[str, Any]:
         if state.get("file_id") is not None and not state.get("documents"):
             return {
@@ -287,14 +285,13 @@ class RAGChainService:
                 "provider_used": None,
             }
 
-    # Check The Success of Model Availability
     def check_generation_success(self, state: RAGState) -> str:
         if state.get("provider_used"):
             return "success"
         remaining = state.get("providers_to_try") or []
         return "retry" if remaining else "failed"
 
-    # Building the Whole Graph
+
     def _build_graph(self):
         """Compiles the LangGraph StateGraph for the RAG pipeline."""
         workflow: StateGraph = StateGraph(RAGState)
@@ -319,15 +316,13 @@ class RAGChainService:
 
         self._graph = workflow.compile()
 
-    # Intialization of Graph
     def initialize(self):
         if not qdrant_service.vectorstore:
             qdrant_service.initialize(embedding_service.get_embeddings())
         if self._graph is None:
             self._build_graph()
 
-    # Invoke the Graph
-    def invoke(self, query: str, file_id: Optional[int] = None) -> Dict[str, Any]:
+    def invoke(self, query: str, file_id: Optional[int] = None, tenant_id: Optional[int] = None) -> Dict[str, Any]:
         if self._graph is None:
             self.initialize()
         assert self._graph is not None, "Graph failed to initialize"
@@ -338,6 +333,7 @@ class RAGChainService:
         initial_state: RAGState = {
             "query": query,
             "file_id": file_id,
+            "tenant_id": tenant_id,
             "providers_to_try": providers,
             "errors": [],
         }

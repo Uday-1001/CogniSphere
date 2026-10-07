@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .api import upload, chat, history, health
+from .api import tenants as tenants_router
 from .database.connection import init_db, SessionLocal
 from .database.models import UploadedFile
 
@@ -89,7 +90,7 @@ async def _sync_qdrant_with_db() -> None:
         )
         client.delete(
             collection_name=collection,
-            points_selector=stale_filter,  # type: ignore[arg-type]
+            points_selector=stale_filter,
         )
         logger.info(
             "Startup sync: Successfully purged stale chunks for document IDs: %s",
@@ -127,6 +128,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(tenants_router.router)
 app.include_router(upload.router)
 app.include_router(chat.router)
 app.include_router(history.router)
@@ -134,5 +136,3 @@ app.include_router(history.router)
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
 if os.path.exists(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
-
-
