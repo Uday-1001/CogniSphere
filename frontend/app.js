@@ -2,6 +2,143 @@ const API_BASE = (window.location.protocol && window.location.protocol.startsWit
   ? window.location.origin
   : 'http://localhost:8000';
 
+// ─── Workspace (Tenant) Manager ───────────────────────────────────────────────
+// Each browser/device gets its own UUID slug that is persisted in localStorage.
+// On first load it is provisioned as a Tenant on the backend (idempotent).
+// Every API call goes through `tenantFetch()` which injects the X-Tenant-Slug
+// header automatically — zero manual setup required per user.
+class WorkspaceManager {
+  constructor() {
+    this.STORAGE_KEY = 'cognisphere_workspace_slug';
+    this.NAME_KEY    = 'cognisphere_workspace_name';
+    this.slug        = null;
+    this.name        = null;
+    this.ready       = false;
+  }
+
+  /** Generate a URL-safe slug from a UUID4 */
+  _generateSlug() {
+    const uuid = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+    // Use the first 16 chars of the UUID so the slug is compact but still unique
+    return 'ws-' + uuid.replace(/-/g, '').slice(0, 16);
+  }
+
+  /** Detect a friendly device label for display */
+  _detectDeviceName() {
+    const ua = navigator.userAgent;
+    if (/mobile/i.test(ua))  return 'Mobile Device';
+    if (/tablet|ipad/i.test(ua)) return 'Tablet';
+    return 'Desktop';
+  }
+
+  /** Return the current slug (must call init() first) */
+  getSlug()  { return this.slug; }
+  getName()  { return this.name; }
+
+  /**
+   * Initialize workspace: load or generate slug, then provision on backend.
+   * Safe to call multiple times — subsequent calls resolve immediately.
+   */
+  async init() {
+    if (this.ready) return;
+
+    // Restore or generate slug
+    let slug = localStorage.getItem(this.STORAGE_KEY);
+    let name = localStorage.getItem(this.NAME_KEY);
+    if (!slug) {
+      slug = this._generateSlug();
+      name = this._detectDeviceName();
+      localStorage.setItem(this.STORAGE_KEY, slug);
+      localStorage.setItem(this.NAME_KEY, name);
+    }
+    this.slug = slug;
+    this.name = name || this._detectDeviceName();
+
+    // Provision tenant on backend (idempotent — safe to call every page load)
+    try {
+      await fetch(`${API_BASE}/api/v1/tenants/provision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: this.slug, name: this.name })
+      });
+    } catch (_) {
+      // Backend might be starting up; requests will still carry the header
+      // and the tenant will be created lazily on first authenticated call.
+    }
+
+    this.ready = true;
+    this._renderSidebarWidget();
+  }
+
+  /**
+   * Drop-in replacement for fetch() that always attaches X-Tenant-Slug.
+   * Usage: await workspace.fetch(url, options)
+   */
+  async fetch(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    if (this.slug) headers.set('X-Tenant-Slug', this.slug);
+    return fetch(url, { ...options, headers });
+  }
+
+  /** Render the workspace info widget in the sidebar if the slot exists */
+  _renderSidebarWidget() {
+    const slots = document.querySelectorAll('.workspace-widget-slot');
+    slots.forEach(slot => {
+      slot.innerHTML = `
+        <div class="workspace-widget" id="workspace-widget">
+          <div class="workspace-widget-header">
+            <span class="workspace-icon">🔒</span>
+            <span class="workspace-label">My Workspace</span>
+          </div>
+          <div class="workspace-slug" id="workspace-slug-display" title="Your private workspace ID">${this.slug}</div>
+          <div class="workspace-name" id="workspace-name-display">${this.name}</div>
+          <div class="workspace-actions">
+            <button class="btn btn-ghost btn-xs" id="copy-workspace-btn" title="Copy workspace ID">Copy ID</button>
+            <button class="btn btn-ghost btn-xs" id="rename-workspace-btn" title="Rename this workspace">Rename</button>
+          </div>
+        </div>
+      `;
+      this._bindWidgetButtons(slot);
+    });
+  }
+
+  _bindWidgetButtons(slot) {
+    const copyBtn   = slot.querySelector('#copy-workspace-btn');
+    const renameBtn = slot.querySelector('#rename-workspace-btn');
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(this.slug).then(() => {
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.textContent = 'Copy ID'; }, 1500);
+        });
+      });
+    }
+
+    if (renameBtn) {
+      renameBtn.addEventListener('click', () => {
+        const newName = prompt('Enter a name for this workspace (e.g. "My Laptop", "iPhone"):',
+                               this.name);
+        if (newName && newName.trim()) {
+          this.name = newName.trim();
+          localStorage.setItem(this.NAME_KEY, this.name);
+          const nameEl = slot.querySelector('#workspace-name-display');
+          if (nameEl) nameEl.textContent = this.name;
+        }
+      });
+    }
+  }
+}
+
+const workspace = new WorkspaceManager();
+
+/** Convenience wrapper: same signature as fetch(), always tenant-scoped */
+function tenantFetch(url, options) {
+  return workspace.fetch(url, options);
+}
+
 class SoundSynth {
   constructor() {
     this.ctx = null;
@@ -64,7 +201,10 @@ class SoundSynth {
 
 const sound = new SoundSynth();
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+
+  // Initialize workspace (auto-generates per-device UUID, provisions tenant)
+  await workspace.init();
 
   const spotlight = document.getElementById('spotlight');
   if (spotlight) {
@@ -293,7 +433,7 @@ async function initHomePage() {
 
   // 4. Fetch Stats with Animated Rolling Counters
   try {
-    const docsRes = await fetch(`${API_BASE}/history/documents`);
+    const docsRes = await tenantFetch(`${API_BASE}/history/documents`);
     if (docsRes.ok) {
       const docs = await docsRes.json();
       const el = document.getElementById('stat-docs-count');
@@ -302,7 +442,7 @@ async function initHomePage() {
   } catch (e) { }
 
   try {
-    const sessionsRes = await fetch(`${API_BASE}/history/sessions`);
+    const sessionsRes = await tenantFetch(`${API_BASE}/history/sessions`);
     if (sessionsRes.ok) {
       const rawSessions = await sessionsRes.json();
       const validSessions = rawSessions.filter(s => s.messages && s.messages.length > 0);
@@ -462,7 +602,7 @@ async function initChatPage() {
   // Dynamically verify valid non-empty sessions from backend history
   let validSessionIds = new Set();
   try {
-    const res = await fetch(`${API_BASE}/history/sessions`);
+    const res = await tenantFetch(`${API_BASE}/history/sessions`);
     if (res.ok) {
       const sessions = await res.json();
       sessions.filter(s => s.messages && s.messages.length > 0).forEach(s => validSessionIds.add(s.session_id));
@@ -590,7 +730,7 @@ async function initCustomFileDropdown(paramFileId) {
 
   let documentsList = [];
   try {
-    const res = await fetch(`${API_BASE}/history/documents`);
+    const res = await tenantFetch(`${API_BASE}/history/documents`);
     if (res.ok) {
       const docs = await res.json();
       documentsList = docs.filter(d => d.status === 'processed');
@@ -718,7 +858,7 @@ function clearChatMessagesArea() {
 
 async function loadChatHistory(sessionId) {
   try {
-    const res = await fetch(`${API_BASE}/chat/${sessionId}/history`);
+    const res = await tenantFetch(`${API_BASE}/chat/${sessionId}/history`);
     if (!res.ok) return;
     const data = await res.json();
     const messages = data.messages || [];
@@ -765,7 +905,7 @@ async function submitChatMessage() {
     if (currentSessionId) bodyPayload.session_id = parseInt(currentSessionId);
     if (selectedFileId) bodyPayload.file_id = parseInt(selectedFileId);
 
-    const res = await fetch(`${API_BASE}/chat/`, {
+    const res = await tenantFetch(`${API_BASE}/chat/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bodyPayload)
@@ -1015,7 +1155,7 @@ async function startFileIngestion() {
     if (previewCard) previewCard.classList.add('hidden');
     if (progressCard) progressCard.classList.remove('hidden');
 
-    const uploadRes = await fetch(`${API_BASE}/upload/`, {
+    const uploadRes = await tenantFetch(`${API_BASE}/upload/`, {
       method: 'POST',
       body: formData
     });
@@ -1028,7 +1168,7 @@ async function startFileIngestion() {
     const uploadData = await uploadRes.json();
     const fileId = uploadData.file_id;
 
-    const processRes = await fetch(`${API_BASE}/upload/${fileId}/process`, {
+    const processRes = await tenantFetch(`${API_BASE}/upload/${fileId}/process`, {
       method: 'POST'
     });
 
@@ -1052,7 +1192,7 @@ function pollProcessingStatus(fileId) {
 
   statusPollingInterval = setInterval(async () => {
     try {
-      const res = await fetch(`${API_BASE}/upload/${fileId}/status`);
+      const res = await tenantFetch(`${API_BASE}/upload/${fileId}/status`);
       if (!res.ok) return;
 
       const data = await res.json();
@@ -1106,7 +1246,7 @@ async function loadProcessedDocsLibrary() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_BASE}/history/documents`);
+    const res = await tenantFetch(`${API_BASE}/history/documents`);
     if (!res.ok) return;
 
     const docs = await res.json();
@@ -1225,7 +1365,7 @@ function initHistoryPage() {
         `Are you sure you want to delete ${selectedDocIds.size} selected documents? This action cannot be undone.`,
         async () => {
           try {
-            const res = await fetch(`${API_BASE}/history/documents/bulk`, {
+            const res = await tenantFetch(`${API_BASE}/history/documents/bulk`, {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ file_ids: Array.from(selectedDocIds) })
@@ -1262,7 +1402,7 @@ async function loadDocumentsHistory() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_BASE}/history/documents`);
+    const res = await tenantFetch(`${API_BASE}/history/documents`);
     if (!res.ok) return;
 
     allDocumentsList = await res.json();
@@ -1331,7 +1471,7 @@ function renderDocumentsList(docs) {
       const name = btn.getAttribute('data-name');
       openDeleteModal(`Are you sure you want to delete "${name}"? This action cannot be undone.`, async () => {
         try {
-          const res = await fetch(`${API_BASE}/history/document/${id}`, { method: 'DELETE' });
+          const res = await tenantFetch(`${API_BASE}/history/document/${id}`, { method: 'DELETE' });
           if (res.ok) {
             sound.success();
             selectedDocIds.delete(id);
@@ -1364,7 +1504,7 @@ async function loadSessionsHistory() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_BASE}/history/sessions`);
+    const res = await tenantFetch(`${API_BASE}/history/sessions`);
     if (!res.ok) return;
 
     const rawSessions = await res.json();

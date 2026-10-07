@@ -68,6 +68,33 @@ async def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
     return tenant
 
 
+@router.post("/provision", response_model=TenantResponse, status_code=status.HTTP_200_OK)
+async def provision_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
+    """Idempotent get-or-create for a tenant workspace.
+
+    Returns the existing tenant if the slug already exists, or creates a new
+    one and returns it. Safe to call on every page load from the frontend.
+    """
+    slug = payload.slug.strip().lower()
+    existing = db.query(Tenant).filter(Tenant.slug == slug).first()
+    if existing:
+        if not existing.is_active:
+            existing.is_active = True  # type: ignore
+            db.commit()
+            db.refresh(existing)
+        return existing
+    tenant = Tenant(
+        uuid=str(uuid.uuid4()),
+        name=payload.name.strip(),
+        slug=slug,
+        is_active=True,
+    )
+    db.add(tenant)
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
 @router.get("/", response_model=List[TenantResponse])
 async def list_tenants(db: Session = Depends(get_db)):
     """Return all tenants (active and inactive)."""

@@ -314,8 +314,7 @@ body.sidebar-collapsed .sidebar-toggle-floating {
 }
 
 .sidebar-bottom {
-  margin-top: auto;
-  padding: .75rem .5rem 0;
+  padding: .5rem .5rem 0;
   border-top: 1px solid var(--line)
 }
 
@@ -2376,4 +2375,85 @@ details summary {
     animation: none !important;
     transition: none !important
   }
+}
+
+/* ── Workspace Widget (Multi-Tenant) ──────────────────────────────────────── */
+
+/* The slot takes up remaining space, pushing itself (and the bottom row) down */
+.workspace-widget-slot {
+  margin-top: auto;
+  padding: 0.5rem 0.5rem 0;
+  margin-bottom: 0.6rem;
+}
+
+.workspace-widget {
+  padding: 0.65rem 0.8rem;
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 9px;
+  font-size: 0.77rem;
+}
+
+/* Fallback for browsers without color-mix */
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .workspace-widget {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+  }
+}
+
+.workspace-widget-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--accent) 75%, var(--text-muted));
+  margin-bottom: 0.3rem;
+}
+
+.workspace-icon {
+  font-size: 0.82rem;
+  opacity: 0.75;
+}
+
+.workspace-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.67rem;
+}
+
+.workspace-slug {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-main);
+  word-break: break-all;
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 0.18rem 0.38rem;
+  margin-bottom: 0.22rem;
+  border: 1px solid var(--border-color);
+  opacity: 0.85;
+}
+
+.workspace-name {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  margin-bottom: 0.45rem;
+  opacity: 0.8;
+}
+
+.workspace-actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.workspace-actions .btn {
+  font-size: 0.68rem;
+  padding: 0.18rem 0.45rem;
+  opacity: 0.85;
+}
+
+.workspace-actions .btn:hover {
+  opacity: 1;
 }
