@@ -360,8 +360,7 @@ class RAGChainService:
         if provider_used != settings.LLM_PROVIDER:
             provider_note = (
                 "\n\n---\n"
-                "_🔄 Just so you know — our primary AI assistant had a small hiccup, "
-                "so a backup assistant stepped in and answered this for you. "
+                "*⚡ Answered using backup AI model.*"
             )
 
         contexts = [doc.page_content for doc in final_state.get("documents", [])]

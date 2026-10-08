@@ -1,14 +1,11 @@
 from __future__ import annotations
-
 import re
 import uuid
 from datetime import datetime
 from typing import List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
-
 from ..database.connection import get_db
 from ..database.models import Tenant
 
@@ -70,11 +67,6 @@ async def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
 
 @router.post("/provision", response_model=TenantResponse, status_code=status.HTTP_200_OK)
 async def provision_tenant(payload: TenantCreate, db: Session = Depends(get_db)):
-    """Idempotent get-or-create for a tenant workspace.
-
-    Returns the existing tenant if the slug already exists, or creates a new
-    one and returns it. Safe to call on every page load from the frontend.
-    """
     slug = payload.slug.strip().lower()
     existing = db.query(Tenant).filter(Tenant.slug == slug).first()
     if existing:

@@ -129,6 +129,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(tenants_router.router)
+app.include_router(tenants_router.router, prefix="/api/v1")
 app.include_router(upload.router)
 app.include_router(chat.router)
 app.include_router(history.router)

@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 import logging
 import re
 import uuid
 from typing import Optional, cast
-
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
-
 from ..database.connection import get_db
 from ..database.models import Tenant
 

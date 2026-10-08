@@ -10,15 +10,15 @@ const API_BASE = (window.location.protocol && window.location.protocol.startsWit
 class WorkspaceManager {
   constructor() {
     this.STORAGE_KEY = 'cognisphere_workspace_slug';
-    this.NAME_KEY    = 'cognisphere_workspace_name';
-    this.slug        = null;
-    this.name        = null;
-    this.ready       = false;
+    this.NAME_KEY = 'cognisphere_workspace_name';
+    this.slug = null;
+    this.name = null;
+    this.ready = false;
   }
 
   /** Generate a URL-safe slug from a UUID4 */
   _generateSlug() {
-    const uuid = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+    const uuid = ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
       (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
     );
     // Use the first 16 chars of the UUID so the slug is compact but still unique
@@ -28,14 +28,14 @@ class WorkspaceManager {
   /** Detect a friendly device label for display */
   _detectDeviceName() {
     const ua = navigator.userAgent;
-    if (/mobile/i.test(ua))  return 'Mobile Device';
+    if (/mobile/i.test(ua)) return 'Mobile Device';
     if (/tablet|ipad/i.test(ua)) return 'Tablet';
     return 'Desktop';
   }
 
   /** Return the current slug (must call init() first) */
-  getSlug()  { return this.slug; }
-  getName()  { return this.name; }
+  getSlug() { return this.slug; }
+  getName() { return this.name; }
 
   /**
    * Initialize workspace: load or generate slug, then provision on backend.
@@ -105,7 +105,7 @@ class WorkspaceManager {
   }
 
   _bindWidgetButtons(slot) {
-    const copyBtn   = slot.querySelector('#copy-workspace-btn');
+    const copyBtn = slot.querySelector('#copy-workspace-btn');
     const renameBtn = slot.querySelector('#rename-workspace-btn');
 
     if (copyBtn) {
@@ -120,7 +120,7 @@ class WorkspaceManager {
     if (renameBtn) {
       renameBtn.addEventListener('click', () => {
         const newName = prompt('Enter a name for this workspace (e.g. "My Laptop", "iPhone"):',
-                               this.name);
+          this.name);
         if (newName && newName.trim()) {
           this.name = newName.trim();
           localStorage.setItem(this.NAME_KEY, this.name);
