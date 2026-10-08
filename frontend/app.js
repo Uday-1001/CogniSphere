@@ -1606,6 +1606,8 @@ class WaterWaveThemeEngine {
     this.ctx = null;
     this.animating = false;
     this.animationId = null;
+    this.safetyTimer = null;
+    this.lastToggleTime = 0;
     // Default to dark mode unless stored preference is light
     this.theme = localStorage.getItem('cognisphere_theme') || 'dark';
     this.initImmediateTheme();
@@ -1622,7 +1624,7 @@ class WaterWaveThemeEngine {
 
   injectButton() {
     // Mode switcher button is accessible on every page inside the menu sidebar
-    if (document.getElementById('theme-toggle-btn')) return;
+    if (document.getElementById('sidebar-theme-wrapper')) return;
 
     let slot = document.querySelector('.sidebar-theme-slot');
     if (!slot) {
@@ -1637,12 +1639,12 @@ class WaterWaveThemeEngine {
     const isDark = currentTheme === 'dark';
 
     slot.innerHTML = `
-      <div class="sidebar-theme-wrapper" id="sidebar-theme-wrapper">
+      <div class="sidebar-theme-wrapper" id="sidebar-theme-wrapper" role="button" tabindex="0" aria-label="Switch Theme (${isDark ? 'Dark Mode' : 'Light Mode'})">
         <div class="sidebar-theme-info">
           <span class="sidebar-theme-title">Appearance</span>
           <span class="sidebar-theme-mode" id="theme-orb-label">${isDark ? 'Dark Mode' : 'Light Mode'}</span>
         </div>
-        <button id="theme-toggle-btn" class="theme-switch-orb" aria-label="Toggle light and dark mode" title="Switch Theme (Liquid Wave)">
+        <button id="theme-toggle-btn" class="theme-switch-orb" aria-label="Toggle light and dark mode" title="Switch Theme (Liquid Wave)" tabindex="-1">
           <div class="orb-glass-shell">
             <div class="orb-liquid-wrapper">
               <svg class="orb-mini-wave wave-1" viewBox="0 0 100 20" preserveAspectRatio="none">
@@ -1673,9 +1675,51 @@ class WaterWaveThemeEngine {
       </div>
     `;
 
+    const wrapper = document.getElementById('sidebar-theme-wrapper');
     const btn = document.getElementById('theme-toggle-btn');
+
+    const triggerToggle = (e) => {
+      if (e) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+      }
+      this.toggleTheme();
+    };
+
+    if (wrapper) {
+      wrapper.addEventListener('click', triggerToggle);
+      wrapper.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          triggerToggle(e);
+        }
+      });
+
+      // Mobile Touch Handling for immediate 0ms touch response
+      let touchStartX = 0;
+      let touchStartY = 0;
+      wrapper.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length > 0) {
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+        }
+      }, { passive: true });
+
+      wrapper.addEventListener('touchend', (e) => {
+        if (e.changedTouches && e.changedTouches.length > 0) {
+          const deltaX = Math.abs(e.changedTouches[0].clientX - touchStartX);
+          const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY);
+          // Tap threshold check (ensure user was tapping, not scrolling menu)
+          if (deltaX < 12 && deltaY < 12) {
+            triggerToggle(e);
+          }
+        }
+      });
+    }
+
     if (btn) {
-      btn.addEventListener('click', () => this.toggleTheme());
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
     }
   }
 
@@ -1703,7 +1747,26 @@ class WaterWaveThemeEngine {
   }
 
   toggleTheme() {
-    if (this.animating) return;
+    const now = Date.now();
+    if (this.lastToggleTime && (now - this.lastToggleTime < 300)) {
+      return; // prevent rapid double triggering from touch + click
+    }
+    this.lastToggleTime = now;
+
+    // Reset any active animation loop cleanly so subsequent taps always respond
+    if (this.animating) {
+      if (this.animationId) {
+        cancelAnimationFrame(this.animationId);
+        this.animationId = null;
+      }
+      if (this.safetyTimer) {
+        clearTimeout(this.safetyTimer);
+        this.safetyTimer = null;
+      }
+      this.animating = false;
+      if (this.canvas) this.canvas.style.opacity = '0';
+    }
+
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     const targetTheme = currentTheme === 'dark' ? 'light' : 'dark';
     this.startWaterWaveAnimation(targetTheme);
@@ -1713,129 +1776,188 @@ class WaterWaveThemeEngine {
     this.animating = true;
     this.setupCanvas();
 
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-
-    // Always measure exact viewport window dimensions
-    const width = window.innerWidth || document.documentElement.clientWidth;
-    const height = window.innerHeight || document.documentElement.clientHeight;
-
-    this.canvas.width = width * dpr;
-    this.canvas.height = height * dpr;
-    this.canvas.style.opacity = '1';
-    this.ctx.scale(dpr, dpr);
-
-    const isTargetLight = targetTheme === 'light';
-
-    if (window.sound && typeof window.sound.playTone === 'function') {
-      window.sound.playTone(isTargetLight ? 340 : 460, 0.12, 'sine', 0.1);
-      setTimeout(() => window.sound.playTone(isTargetLight ? 520 : 380, 0.18, 'sine', 0.12), 140);
-      setTimeout(() => window.sound.playTone(isTargetLight ? 680 : 260, 0.22, 'sine', 0.08), 320);
+    if (!this.canvas || !this.ctx) {
+      this.animating = false;
+      return;
     }
 
-    // Dynamic rising bubbles inside liquid
-    const bubbleCount = 45;
-    const bubbles = [];
-    for (let i = 0; i < bubbleCount; i++) {
-      bubbles.push({
-        x: Math.random() * width,
-        yOffset: Math.random() * height * 0.85,
-        radius: 2 + Math.random() * 6.5,
-        speed: 1.8 + Math.random() * 3.8,
-        wobbleSpeed: 0.02 + Math.random() * 0.04,
-        opacity: 0.35 + Math.random() * 0.55
-      });
-    }
+    if (this.safetyTimer) clearTimeout(this.safetyTimer);
+    this.safetyTimer = setTimeout(() => {
+      this.animating = false;
+      if (this.canvas) this.canvas.style.opacity = '0';
+    }, 2000);
 
-    const duration = 1650;
-    const startTime = performance.now();
-    let themeSwapped = false;
+    try {
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const width = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 360);
+      const height = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 640);
 
-    const animate = (now) => {
-      const elapsed = now - startTime;
-      const linearProgress = Math.min(1, elapsed / duration);
+      this.canvas.width = width * dpr;
+      this.canvas.height = height * dpr;
+      this.canvas.style.opacity = '1';
 
-      // Waves ALWAYS start at window bottom (height + 80) and rise to top (-80)
-      const progress = Math.pow(linearProgress, 1.4);
-      const startY = height + 80;
-      const endY = -80;
-      const waterY = startY + (endY - startY) * progress;
+      const isTargetLight = targetTheme === 'light';
 
-      if (linearProgress >= 0.52 && !themeSwapped) {
-        themeSwapped = true;
-        document.documentElement.setAttribute('data-theme', targetTheme);
-        localStorage.setItem('cognisphere_theme', targetTheme);
-
-        const labelEl = document.getElementById('theme-orb-label');
-        if (labelEl) labelEl.textContent = targetTheme === 'dark' ? 'Dark Mode' : 'Light Mode';
-      }
-
-      // Dynamic Shaking / Wave displacement on main content container only (keeps sidebar static and sticky)
-      const mainEl = document.querySelector('.main-content') || document.querySelector('.chat-main');
-      if (linearProgress > 0.12 && linearProgress < 0.78) {
-        const shakeIntensity = Math.sin((linearProgress - 0.12) / 0.66 * Math.PI) * 3;
-        const shakeY = (Math.cos(now * 0.03) * shakeIntensity * 0.5);
-        if (mainEl) {
-          mainEl.style.transform = `translate3d(0, ${shakeY.toFixed(2)}px, 0)`;
+      try {
+        if (window.sound && typeof window.sound.playTone === 'function') {
+          window.sound.playTone(isTargetLight ? 340 : 460, 0.12, 'sine', 0.1);
+          setTimeout(() => {
+            try {
+              if (window.sound && typeof window.sound.playTone === 'function') {
+                window.sound.playTone(isTargetLight ? 520 : 380, 0.18, 'sine', 0.12);
+              }
+            } catch (_) {}
+          }, 140);
+          setTimeout(() => {
+            try {
+              if (window.sound && typeof window.sound.playTone === 'function') {
+                window.sound.playTone(isTargetLight ? 680 : 260, 0.22, 'sine', 0.08);
+              }
+            } catch (_) {}
+          }, 320);
         }
-      } else {
-        if (mainEl) mainEl.style.transform = 'none';
+      } catch (soundErr) {
+        // Safe catch for mobile sound restriction
       }
 
-      this.ctx.clearRect(0, 0, width, height);
-
-      // Water Color Gradients:
-      // Dark -> Light: Shimmering aqua tide turning into crisp light mode surface
-      // Light -> Dark: Deep sapphire wave turning into sleek dark mode surface
-      const grad = this.ctx.createLinearGradient(0, Math.max(0, waterY - 50), 0, height);
-      if (isTargetLight) {
-        grad.addColorStop(0, 'rgba(15, 82, 87, 0.98)');
-        grad.addColorStop(0.3, 'rgba(47, 107, 63, 0.96)');
-        grad.addColorStop(0.7, 'rgba(111, 189, 182, 0.97)');
-        grad.addColorStop(1, 'rgba(242, 243, 240, 0.99)');
-      } else {
-        grad.addColorStop(0, 'rgba(111, 189, 182, 0.98)');
-        grad.addColorStop(0.25, 'rgba(15, 82, 87, 0.97)');
-        grad.addColorStop(0.65, 'rgba(22, 27, 30, 0.98)');
-        grad.addColorStop(1, 'rgba(15, 19, 21, 0.99)');
+      // Dynamic rising bubbles inside liquid
+      const bubbleCount = 45;
+      const bubbles = [];
+      for (let i = 0; i < bubbleCount; i++) {
+        bubbles.push({
+          x: Math.random() * width,
+          yOffset: Math.random() * height * 0.85,
+          radius: 2 + Math.random() * 6.5,
+          speed: 1.8 + Math.random() * 3.8,
+          wobbleSpeed: 0.02 + Math.random() * 0.04,
+          opacity: 0.35 + Math.random() * 0.55
+        });
       }
 
-      const t = now * 0.0035;
+      const duration = 1650;
+      const startTime = performance.now();
+      let themeSwapped = false;
 
-      // Layer 1: Deep back wave
-      this.drawWaveLayer(width, height, waterY + 8, 28, 0.006, t * 1.3, 'rgba(15, 82, 87, 0.45)');
+      const animate = (now) => {
+        if (!this.animating || !this.ctx) return;
 
-      // Layer 2: Mid wave
-      this.drawWaveLayer(width, height, waterY + 4, 18, 0.013, -t * 1.6, 'rgba(111, 189, 182, 0.55)');
+        try {
+          const timestamp = (typeof now === 'number' && isFinite(now)) ? now : performance.now();
+          const elapsed = Math.max(0, timestamp - startTime);
+          const linearProgress = Math.min(1, elapsed / duration);
 
-      // Layer 3: Front wave crest with gradient fill & glowing highlights
-      this.drawMainWave(width, height, waterY, grad, t, isTargetLight);
+          // Waves ALWAYS start at window bottom (height + 80) and rise to top (-80)
+          const progress = Math.pow(linearProgress, 1.4);
+          const startY = height + 80;
+          const endY = -80;
+          const waterY = startY + (endY - startY) * progress;
 
-      // Draw Foam & Rising Bubbles
-      this.drawBubbles(width, height, waterY, bubbles, now, isTargetLight);
+          if (linearProgress >= 0.52 && !themeSwapped) {
+            themeSwapped = true;
+            document.documentElement.setAttribute('data-theme', targetTheme);
+            try {
+              localStorage.setItem('cognisphere_theme', targetTheme);
+            } catch (e) {}
 
-      if (linearProgress < 1) {
-        this.animationId = requestAnimationFrame(animate);
-      } else {
-        if (mainEl) mainEl.style.transform = 'none';
-        this.canvas.style.opacity = '0';
-        setTimeout(() => {
-          this.ctx.clearRect(0, 0, width, height);
+            const labelEl = document.getElementById('theme-orb-label');
+            if (labelEl) labelEl.textContent = targetTheme === 'dark' ? 'Dark Mode' : 'Light Mode';
+
+            const wrapperEl = document.getElementById('sidebar-theme-wrapper');
+            if (wrapperEl) wrapperEl.setAttribute('aria-label', `Switch Theme (${targetTheme === 'dark' ? 'Dark Mode' : 'Light Mode'})`);
+          }
+
+          // Dynamic Shaking / Wave displacement on main content container only (keeps sidebar static and sticky)
+          const mainEl = document.querySelector('.main-content') || document.querySelector('.chat-main');
+          if (linearProgress > 0.12 && linearProgress < 0.78) {
+            const shakeIntensity = Math.sin((linearProgress - 0.12) / 0.66 * Math.PI) * 3;
+            const shakeY = (Math.cos(timestamp * 0.03) * shakeIntensity * 0.5);
+            if (mainEl && isFinite(shakeY)) {
+              mainEl.style.transform = `translate3d(0, ${shakeY.toFixed(2)}px, 0)`;
+            }
+          } else {
+            if (mainEl) mainEl.style.transform = 'none';
+          }
+
+          this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          this.ctx.scale(dpr, dpr);
+
+          const safeWaterY = (typeof waterY === 'number' && isFinite(waterY)) ? waterY : height;
+          const gradY0 = Math.max(0, safeWaterY - 50);
+          const gradY1 = Math.max(gradY0 + 1, height);
+
+          // Guaranteed finite gradient bounds to prevent Canvas createLinearGradient TypeError
+          const safeY0 = isFinite(gradY0) ? gradY0 : 0;
+          const safeY1 = isFinite(gradY1) ? gradY1 : Math.max(1, height);
+
+          const grad = this.ctx.createLinearGradient(0, safeY0, 0, safeY1);
+          if (isTargetLight) {
+            grad.addColorStop(0, 'rgba(15, 82, 87, 0.98)');
+            grad.addColorStop(0.3, 'rgba(47, 107, 63, 0.96)');
+            grad.addColorStop(0.7, 'rgba(111, 189, 182, 0.97)');
+            grad.addColorStop(1, 'rgba(242, 243, 240, 0.99)');
+          } else {
+            grad.addColorStop(0, 'rgba(111, 189, 182, 0.98)');
+            grad.addColorStop(0.25, 'rgba(15, 82, 87, 0.97)');
+            grad.addColorStop(0.65, 'rgba(22, 27, 30, 0.98)');
+            grad.addColorStop(1, 'rgba(15, 19, 21, 0.99)');
+          }
+
+          const t = timestamp * 0.0035;
+
+          // Layer 1: Deep back wave
+          this.drawWaveLayer(width, height, safeWaterY + 8, 28, 0.006, t * 1.3, 'rgba(15, 82, 87, 0.45)');
+
+          // Layer 2: Mid wave
+          this.drawWaveLayer(width, height, safeWaterY + 4, 18, 0.013, -t * 1.6, 'rgba(111, 189, 182, 0.55)');
+
+          // Layer 3: Front wave crest with gradient fill & glowing highlights
+          this.drawMainWave(width, height, safeWaterY, grad, t, isTargetLight);
+
+          // Draw Foam & Rising Bubbles
+          this.drawBubbles(width, height, safeWaterY, bubbles, timestamp, isTargetLight);
+
+          if (linearProgress < 1) {
+            this.animationId = requestAnimationFrame(animate);
+          } else {
+            if (mainEl) mainEl.style.transform = 'none';
+            this.canvas.style.opacity = '0';
+            setTimeout(() => {
+              if (this.ctx) this.ctx.clearRect(0, 0, width, height);
+              this.animating = false;
+              if (this.safetyTimer) {
+                clearTimeout(this.safetyTimer);
+                this.safetyTimer = null;
+              }
+            }, 250);
+          }
+        } catch (animErr) {
+          console.warn('Theme wave animation frame error:', animErr);
+          // Fallback: ensure theme attribute is set even if animation frame fails
+          document.documentElement.setAttribute('data-theme', targetTheme);
           this.animating = false;
-        }, 250);
-      }
-    };
+          if (this.canvas) this.canvas.style.opacity = '0';
+        }
+      };
 
-    this.animationId = requestAnimationFrame(animate);
+      this.animationId = requestAnimationFrame(animate);
+    } catch (err) {
+      console.warn('Theme wave animation initialization error:', err);
+      document.documentElement.setAttribute('data-theme', targetTheme);
+      this.animating = false;
+      if (this.canvas) this.canvas.style.opacity = '0';
+    }
   }
 
   drawWaveLayer(w, h, baseY, amplitude, freq, timeShift, color) {
+    if (!this.ctx) return;
     this.ctx.save();
     this.ctx.fillStyle = color;
     this.ctx.beginPath();
     this.ctx.moveTo(0, h);
     for (let x = 0; x <= w + 10; x += 10) {
       const y = baseY + Math.sin(x * freq + timeShift) * amplitude;
-      this.ctx.lineTo(x, y);
+      this.ctx.lineTo(x, isFinite(y) ? y : baseY);
     }
     this.ctx.lineTo(w, h);
     this.ctx.closePath();
@@ -1844,6 +1966,7 @@ class WaterWaveThemeEngine {
   }
 
   drawMainWave(w, h, baseY, gradientFill, t, isTargetLight) {
+    if (!this.ctx) return;
     this.ctx.save();
     this.ctx.fillStyle = gradientFill;
     this.ctx.beginPath();
@@ -1856,7 +1979,8 @@ class WaterWaveThemeEngine {
       const wave1 = Math.sin(x * 0.008 + t * 2.3) * 24;
       const wave2 = Math.cos(x * 0.016 - t * 1.9) * 14;
       const turbulence = Math.sin(x * 0.035 + t * 4.5) * 5;
-      const y = baseY + wave1 + wave2 + turbulence;
+      const rawY = baseY + wave1 + wave2 + turbulence;
+      const y = isFinite(rawY) ? rawY : baseY;
 
       crestPoints.push({ x, y });
       this.ctx.lineTo(x, y);
@@ -1883,11 +2007,13 @@ class WaterWaveThemeEngine {
   }
 
   drawBubbles(w, h, waterY, bubbles, now, isTargetLight) {
+    if (!this.ctx) return;
     this.ctx.save();
     for (let b of bubbles) {
       const bubbleY = waterY + b.yOffset - ((now * 0.08 * b.speed) % (h * 0.75));
-      if (bubbleY > waterY - 12 && bubbleY < h) {
+      if (isFinite(bubbleY) && bubbleY > waterY - 12 && bubbleY < h) {
         const bubbleX = b.x + Math.sin(now * b.wobbleSpeed) * 16;
+        if (!isFinite(bubbleX)) continue;
 
         this.ctx.beginPath();
         this.ctx.arc(bubbleX, bubbleY, b.radius, 0, Math.PI * 2);

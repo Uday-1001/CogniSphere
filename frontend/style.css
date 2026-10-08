@@ -1663,10 +1663,21 @@ details summary {
   transform: scale(1.15);
 }
 
-.fp-svg-doc { color: #0284c7; }
-.fp-svg-data { color: #10b981; }
-.fp-svg-audio { color: #8b5cf6; }
-.fp-svg-video { color: #f59e0b; }
+.fp-svg-doc {
+  color: #0284c7;
+}
+
+.fp-svg-data {
+  color: #10b981;
+}
+
+.fp-svg-audio {
+  color: #8b5cf6;
+}
+
+.fp-svg-video {
+  color: #f59e0b;
+}
 
 .drop-zone {
   position: relative;
@@ -2684,8 +2695,8 @@ details summary {
   pointer-events: none;
   will-change: opacity, transform, filter;
   transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-              filter 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .format-slide.active {
@@ -2703,8 +2714,8 @@ details summary {
   pointer-events: none;
   z-index: 1;
   transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-              filter 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .format-svg {
@@ -2715,10 +2726,25 @@ details summary {
   color: var(--accent);
 }
 
-.svg-doc { color: #0284c7; background: rgba(2, 132, 199, 0.1); }
-.svg-audio { color: #8b5cf6; background: rgba(139, 92, 246, 0.1); }
-.svg-data { color: #10b981; background: rgba(16, 185, 129, 0.1); }
-.svg-video { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+.svg-doc {
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.1);
+}
+
+.svg-audio {
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.svg-data {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.svg-video {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
 
 .format-text {
   display: flex;
@@ -2754,7 +2780,12 @@ details summary {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 12px;
-  transition: border-color 0.3s var(--fluid-ease), box-shadow 0.3s var(--fluid-ease), background 0.3s;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.2s var(--fluid-ease), box-shadow 0.2s var(--fluid-ease), background 0.2s, transform 0.15s ease;
 }
 
 .sidebar-theme-wrapper:hover {
@@ -2762,10 +2793,15 @@ details summary {
   box-shadow: 0 4px 16px var(--theme-switch-glow);
 }
 
+.sidebar-theme-wrapper:active {
+  transform: scale(0.97);
+}
+
 .sidebar-theme-info {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  pointer-events: none;
 }
 
 .sidebar-theme-title {
@@ -2795,6 +2831,10 @@ details summary {
   border-radius: 50%;
   cursor: pointer;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  pointer-events: none;
   overflow: hidden;
   transition: transform 0.3s var(--fluid-ease);
 }
@@ -2864,8 +2904,13 @@ html[data-theme="light"] .orb-liquid-wrapper {
 }
 
 @keyframes orbWaveMove {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 .orb-icon-container {
@@ -2905,4 +2950,4 @@ html[data-theme="light"] .icon-moon {
 html[data-theme="light"] .icon-sun {
   opacity: 1;
   transform: rotate(0deg) scale(1);
-}
+}
