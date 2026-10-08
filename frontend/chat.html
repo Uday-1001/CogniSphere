@@ -5,6 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat Assistant — CogniSphere</title>
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('cognisphere_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet"
@@ -66,6 +72,8 @@
           <span>Library</span>
         </a>
       </nav>
+
+      <div class="sidebar-theme-slot"></div>
 
       <div class="workspace-widget-slot"></div>
 
