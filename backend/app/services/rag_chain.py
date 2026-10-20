@@ -1,6 +1,6 @@
 import logging
 import operator
-from typing import Dict, Any, List, Optional, TypedDict, Annotated
+from typing import Dict, Any, List, Optional, TypedDict, Annotated, cast
 from langgraph.graph import StateGraph, END
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
@@ -31,25 +31,7 @@ Expanded_query_prompt = ChatPromptTemplate.from_template(
     "Original query: {query}"
 )
 
-def detect_format_instruction(query: str) -> str:
-    q = query.lower()
-    if "summary" in q or "summarize" in q:
-        return "Use the SUMMARY Response Format."
-    elif "revision notes" in q or "notes" in q:
-        return "Use the REVISION NOTES Response Format."
-    elif "flashcard" in q:
-        return "Use the FLASHCARDS Response Format."
-    elif "quiz" in q or "mcq" in q:
-        return "Use the QUIZ Response Format."
-    elif "compare" in q or "difference" in q:
-        return "Use the COMPARISON Response Format."
-    elif "define" in q or "definition" in q:
-        return "Use the DEFINITIONS Response Format."
-    elif "algorithm" in q or "procedure" in q or "steps" in q:
-        return "Use the ALGORITHMS / PROCEDURES Response Format."
-    elif "code" in q or "program" in q:
-        return "Use the PROGRAMMING QUESTIONS Response Format."
-    return "Use the GENERAL RESPONSE FORMAT."
+
 
 
 class RAGState(TypedDict, total=False):
@@ -205,19 +187,17 @@ class RAGChainService:
             if doc.metadata.get("timestamp_start") and doc.metadata.get("timestamp_end")
         ]
 
-        format_instruction: str = detect_format_instruction(state["query"])
-
+        format_instruction = ""
         if file_id is not None and documents:
             focused_filename = documents[0].metadata.get("filename", "the selected document")
-            scope_note = (
-                f"\n\n[KNOWLEDGE FOCUS ACTIVE] You are currently in single-document mode. "
+            format_instruction = (
+                f"[KNOWLEDGE FOCUS ACTIVE] You are currently in single-document mode. "
                 f"The user has selected '{focused_filename}' as their knowledge source. "
                 f"You MUST answer EXCLUSIVELY from the context chunks retrieved from this document. "
                 f"Do NOT use any information from other documents or from your general training knowledge. "
                 f"If the answer is not present in the provided context, respond exactly: "
                 f"'I don't have enough information in the selected document to answer this question.'"
             )
-            format_instruction = format_instruction + scope_note
 
         return {
             "documents": documents,
@@ -256,7 +236,7 @@ class RAGChainService:
             content = generation_chain.invoke({
                 "context": state.get("context", ""),
                 "question": state["query"],
-                "format_instruction": state.get("format_instruction", "Use the GENERAL RESPONSE FORMAT."),
+                "format_instruction": state.get("format_instruction", ""),
             })
 
             if not content or not content.strip():
@@ -294,7 +274,8 @@ class RAGChainService:
 
     def _build_graph(self):
         """Compiles the LangGraph StateGraph for the RAG pipeline."""
-        workflow: StateGraph = StateGraph(RAGState)
+        # Cast RAGState to Any to bypass Pyright/Pylance TypedDict protocol bound check (false positive)
+        workflow: StateGraph = StateGraph(cast(Any, RAGState))
 
         workflow.add_node("expand_query", self.expand_query_node)
         workflow.add_node("retrieve", self.retrieve_node)

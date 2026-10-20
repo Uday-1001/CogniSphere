@@ -15,6 +15,7 @@ html[data-theme="dark"],
   --ok: #82C493;
   --serif: "Newsreader", Georgia, "Times New Roman", serif;
   --sans: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --chat-font: "Lora", Georgia, "Times New Roman", serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --text-main: var(--ink);
   --text-muted: var(--muted);
@@ -65,7 +66,6 @@ body {
   font: 400 15.5px/1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
   animation: pageEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: opacity, transform, filter
 }
 
 .main-content,
@@ -84,12 +84,10 @@ body.page-exit {
 @keyframes pageEnter {
   0% {
     opacity: 0;
-    filter: blur(5px)
   }
 
   100% {
     opacity: 1;
-    filter: blur(0)
   }
 }
 
@@ -1384,12 +1382,31 @@ section {
 .msg-user .msg-bubble {
   background: var(--surface-2);
   padding: .7rem 1rem;
-  border-radius: 16px 16px 4px 16px
+  border-radius: 16px 16px 4px 16px;
+  font-family: var(--sans);
+  font-size: 0.98rem;
+  line-height: 1.6;
 }
 
 .msg-ai .msg-bubble,
 .hmsg-ai>div:last-child {
-  font: 400 1.06rem/1.7 var(--serif)
+  font-family: var(--chat-font);
+  font-size: 1.05rem;
+  font-weight: 400;
+  line-height: 1.76;
+  letter-spacing: 0.005em;
+}
+
+.msg-ai .msg-bubble strong,
+.msg-ai .msg-bubble b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.msg-ai .msg-bubble em,
+.msg-ai .msg-bubble i {
+  font-style: italic;
+  font-family: var(--chat-font);
 }
 
 .msg-bubble h1,
@@ -1413,8 +1430,9 @@ section {
   margin-bottom: .75rem;
   border-bottom: 2px solid var(--accent);
   color: var(--ink);
-  font-family: var(--serif);
-  font-weight: 600
+  font-family: var(--chat-font);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .msg-bubble h1,
@@ -2950,4 +2968,352 @@ html[data-theme="light"] .icon-moon {
 html[data-theme="light"] .icon-sun {
   opacity: 1;
   transform: rotate(0deg) scale(1);
+}
+
+html.walkthrough-active,
+body.walkthrough-active {
+  overflow: hidden !important;
+  transform: none !important;
+  will-change: auto !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+html.walkthrough-active::-webkit-scrollbar,
+body.walkthrough-active::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.walkthrough-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 99998 !important;
+  background: rgba(5, 7, 10, 0.72) !important;
+  backdrop-filter: blur(5px) !important;
+  -webkit-backdrop-filter: blur(5px) !important;
+  pointer-events: auto !important;
+  will-change: clip-path, opacity !important;
+  transition: clip-path 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease !important;
+}
+
+.walkthrough-spotlight-frame {
+  position: fixed !important;
+  z-index: 99999 !important;
+  border-radius: 12px !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.9), 0 0 24px rgba(255, 255, 255, 0.18), inset 0 0 12px rgba(255, 255, 255, 0.03) !important;
+  pointer-events: none !important;
+  will-change: top, left, width, height, opacity !important;
+  transition: top 0.38s cubic-bezier(0.16, 1, 0.3, 1), left 0.38s cubic-bezier(0.16, 1, 0.3, 1), width 0.38s cubic-bezier(0.16, 1, 0.3, 1), height 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
+  animation: walkthroughPulse 3.2s infinite cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+@keyframes walkthroughPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.9), 0 0 18px rgba(255, 255, 255, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.9), 0 0 32px rgba(255, 255, 255, 0.24);
+  }
+}
+
+.walkthrough-card {
+  position: fixed !important;
+  z-index: 100000 !important;
+  width: 420px !important;
+  max-width: calc(100vw - 32px) !important;
+  background: #0B0C0E !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 14px !important;
+  padding: 1.25rem 1.35rem !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.96), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
+  will-change: top, left, transform, opacity !important;
+  animation: walkthroughCardIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.8rem !important;
+  box-sizing: border-box !important;
+  transition: top 0.38s cubic-bezier(0.16, 1, 0.3, 1), left 0.38s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
+}
+
+@keyframes walkthroughCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.walkthrough-card-top {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.walkthrough-step-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  padding: 0.25rem 0.65rem !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  border-radius: 20px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #E5E7EB !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+.walkthrough-step-dot {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8) !important;
+}
+
+.walkthrough-skip-btn {
+  background: transparent !important;
+  border: none !important;
+  color: #9CA3AF !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  padding: 0.25rem 0.6rem !important;
+  border-radius: 6px !important;
+  transition: all 0.18s ease !important;
+}
+
+.walkthrough-skip-btn:hover {
+  color: #FFFFFF !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.walkthrough-card-title {
+  font-size: 1.15rem !important;
+  font-weight: 600 !important;
+  color: #FFFFFF !important;
+  margin: 0 !important;
+  line-height: 1.35 !important;
+}
+
+.walkthrough-card-desc {
+  font-size: 0.92rem !important;
+  color: #9CA3AF !important;
+  line-height: 1.55 !important;
+  margin: 0 !important;
+}
+
+.walkthrough-card-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-top: 0.35rem !important;
+  padding-top: 0.85rem !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.walkthrough-dots-indicator {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+}
+
+.walkthrough-dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.22) !important;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease, border-radius 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+.walkthrough-dot.active {
+  background: #FFFFFF !important;
+  width: 22px !important;
+  border-radius: 10px !important;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5) !important;
+}
+
+.walkthrough-actions-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.55rem !important;
+}
+
+.walkthrough-btn-primary {
+  background: #FFFFFF !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 1rem !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  transition: background 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease !important;
+  text-decoration: none !important;
+}
+
+.walkthrough-btn-primary:hover {
+  background: #E5E7EB !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15) !important;
+}
+
+.walkthrough-btn-ghost {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #D1D5DB !important;
+  font-weight: 500 !important;
+  font-size: 0.85rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  border-radius: 8px !important;
+  padding: 0.5rem 0.9rem !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  text-decoration: none !important;
+}
+
+.walkthrough-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  transform: translateY(-1px) !important;
+}
+
+.walkthrough-success-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 100005 !important;
+  background: rgba(5, 7, 10, 0.74) !important;
+  backdrop-filter: blur(5px) !important;
+  -webkit-backdrop-filter: blur(5px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1.5rem !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+  animation: walkthroughFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+@keyframes walkthroughFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.walkthrough-success-modal {
+  width: 480px !important;
+  max-width: min(480px, calc(100vw - 32px)) !important;
+  max-height: calc(100vh - 40px) !important;
+  background: #0B0C0E !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 18px !important;
+  padding: 2rem 1.85rem !important;
+  text-align: center !important;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.98), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  animation: walkthroughModalPop 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 0.85rem !important;
+  box-sizing: border-box !important;
+  margin: auto !important;
+  overflow-y: auto !important;
+}
+
+@keyframes walkthroughModalPop {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.walkthrough-success-icon-wrap {
+  width: 60px !important;
+  height: 60px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.08) !important;
+}
+
+.walkthrough-success-title {
+  font-size: 1.45rem !important;
+  font-weight: 600 !important;
+  color: #FFFFFF !important;
+  margin: 0 !important;
+  line-height: 1.25 !important;
+}
+
+.walkthrough-success-desc {
+  font-size: 0.95rem !important;
+  color: #9CA3AF !important;
+  line-height: 1.55 !important;
+  margin: 0 !important;
+  max-width: 420px !important;
+}
+
+.walkthrough-features-preview {
+  display: flex !important;
+  gap: 0.6rem !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important;
+  margin: 0.4rem 0 !important;
+}
+
+.walkthrough-feature-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  padding: 0.45rem 0.85rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  border-radius: 20px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #E5E7EB !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.walkthrough-feature-chip svg {
+  color: #D1D5DB !important;
+}
+
+.walkthrough-success-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.75rem !important;
+  width: 100% !important;
+  margin-top: 0.5rem !important;
+  flex-wrap: wrap !important;
 }

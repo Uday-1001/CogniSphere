@@ -250,6 +250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (bodyId === 'chat-page') initChatPage();
   if (bodyId === 'upload-page') initUploadPage();
   if (bodyId === 'history-page') initHistoryPage();
+  initWalkthroughSystem();
 });
 
 function initSidebarSystem() {
@@ -617,7 +618,7 @@ async function initChatPage() {
   let activeSessionToLoad = null;
   if (paramSessionId && validSessionIds.has(parseInt(paramSessionId))) {
     activeSessionToLoad = parseInt(paramSessionId);
-  } else {
+  } else if (!paramFileId) {
     const storedId = localStorage.getItem('cognisphere_session_id');
     if (storedId && validSessionIds.has(parseInt(storedId))) {
       activeSessionToLoad = parseInt(storedId);
@@ -682,8 +683,13 @@ async function initChatPage() {
 
   // Initialize Scroll-Aware Auto-Hide Toolbar
   initScrollAwareToolbar();
+  initChatScrollController();
 
   bindPromptPillEvents();
+
+  if (paramFileId && textarea) {
+    textarea.focus();
+  }
 }
 
 function initScrollAwareToolbar() {
@@ -723,7 +729,6 @@ function initScrollAwareToolbar() {
   });
 }
 
-// Custom Glassmorphic Select Component Logic
 async function initCustomFileDropdown(paramFileId) {
   const wrap = document.getElementById('custom-file-dropdown');
   const trigger = document.getElementById('file-dropdown-trigger');
@@ -742,7 +747,6 @@ async function initCustomFileDropdown(paramFileId) {
     }
   } catch (e) { }
 
-  // Render Custom Options with CogniSphere sparkle
   menu.innerHTML = `
     <div class="custom-select-option selected" data-value="" data-label=" All Documents">
       <span></span> <span>All Documents</span>
@@ -755,43 +759,50 @@ async function initCustomFileDropdown(paramFileId) {
     `).join('')}
   `;
 
-  // Toggle Menu
+  if (nativeSelect) {
+    nativeSelect.innerHTML = `<option value=""> All Files</option>` + documentsList.map(d => `<option value="${d.id}">${escapeHtml(d.filename)}</option>`).join('');
+  }
+
+  const selectOption = (opt) => {
+    menu.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+
+    const val = opt.getAttribute('data-value');
+    const label = opt.getAttribute('data-label');
+
+    selectedFileId = val ? parseInt(val) : null;
+    if (nativeSelect) nativeSelect.value = val;
+    if (selectedLabel) selectedLabel.innerHTML = label;
+
+    updateScopeDisplay(val, label);
+    wrap.classList.remove('open');
+  };
+
   trigger.addEventListener('click', (e) => {
     e.stopPropagation();
     wrap.classList.toggle('open');
     sound.click();
   });
 
-  // Close on outside click
   document.addEventListener('click', () => {
     wrap.classList.remove('open');
   });
 
-  // Option Click Handlers
   menu.querySelectorAll('.custom-select-option').forEach(opt => {
     opt.addEventListener('click', (e) => {
       e.stopPropagation();
-      menu.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
-      opt.classList.add('selected');
-
-      const val = opt.getAttribute('data-value');
-      const label = opt.getAttribute('data-label');
-
-      selectedFileId = val ? parseInt(val) : null;
-      if (nativeSelect) nativeSelect.value = val;
-      if (selectedLabel) selectedLabel.innerHTML = label;
-
-      updateScopeDisplay(val, label);
-      wrap.classList.remove('open');
+      selectOption(opt);
       sound.click();
     });
   });
 
-  // Auto-Select paramFileId if present
   if (paramFileId) {
     const targetOpt = menu.querySelector(`.custom-select-option[data-value="${paramFileId}"]`);
     if (targetOpt) {
-      targetOpt.click();
+      selectOption(targetOpt);
+    } else {
+      selectedFileId = parseInt(paramFileId);
+      if (nativeSelect) nativeSelect.value = paramFileId;
     }
   }
 }
@@ -830,6 +841,7 @@ function bindPromptPillEvents() {
 }
 
 function clearChatMessagesArea() {
+  chatUserScrolledUp = false;
   const messagesContainer = document.getElementById('chat-messages');
   if (!messagesContainer) return;
 
@@ -877,7 +889,7 @@ async function loadChatHistory(sessionId) {
       });
 
       updateSessionInfo(sessionId, messages.length);
-      scrollToBottomMessages();
+      scrollToBottomMessages(true, false);
     } else {
       updateSessionInfo(sessionId, 0);
     }
@@ -900,7 +912,7 @@ async function submitChatMessage() {
   if (emptyState) emptyState.remove();
 
   appendMessageBubble('user', question);
-  scrollToBottomMessages();
+  scrollToBottomMessages(true, true);
 
   if (sendBtn) sendBtn.disabled = true;
   showTypingIndicator();
@@ -1033,7 +1045,7 @@ function showTypingIndicator() {
     <span style="font-size: 0.8rem; color: var(--accent); margin-left: 0.4rem; font-weight: 600;">Reading your files</span>
   `;
   container.appendChild(indicator);
-  scrollToBottomMessages();
+  scrollToBottomMessages(true, true);
 }
 
 function removeTypingIndicator() {
@@ -1041,10 +1053,46 @@ function removeTypingIndicator() {
   if (indicator) indicator.remove();
 }
 
-function scrollToBottomMessages() {
+let chatUserScrolledUp = false;
+let chatScrollListenerInitialized = false;
+
+function initChatScrollController() {
   const container = document.getElementById('chat-messages');
-  if (container) {
+  if (!container || chatScrollListenerInitialized) return;
+  chatScrollListenerInitialized = true;
+
+  const updateScrollState = () => {
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    chatUserScrolledUp = distanceFromBottom > 40;
+  };
+
+  container.addEventListener('scroll', updateScrollState, { passive: true });
+  container.addEventListener('wheel', (e) => {
+    if (e.deltaY < 0) {
+      chatUserScrolledUp = true;
+    }
+  }, { passive: true });
+  container.addEventListener('touchmove', updateScrollState, { passive: true });
+}
+
+function scrollToBottomMessages(force = false, smooth = false) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+
+  if (!chatScrollListenerInitialized) {
+    initChatScrollController();
+  }
+
+  if (force) {
+    chatUserScrolledUp = false;
+  }
+
+  if (chatUserScrolledUp) return;
+
+  if (smooth) {
     container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+  } else {
+    container.scrollTop = container.scrollHeight;
   }
 }
 
@@ -1215,14 +1263,10 @@ function pollProcessingStatus(fileId) {
         clearInterval(statusPollingInterval);
         sound.success();
         showAlert('upload-alert', ` <b>${escapeHtml(selectedUploadFile ? selectedUploadFile.name : 'File')}</b> successfully processed and ready!`, 'success');
-
-        const progressCard = document.getElementById('progress-card');
-        setTimeout(() => {
-          if (progressCard) progressCard.classList.add('hidden');
-        }, 1500);
-
         selectedUploadFile = null;
-        loadProcessedDocsLibrary();
+        setTimeout(() => {
+          window.location.href = `chat.html?file_id=${fileId}`;
+        }, 500);
       } else if (status === 'error') {
         clearInterval(statusPollingInterval);
         sound.error();
@@ -1806,14 +1850,14 @@ class WaterWaveThemeEngine {
               if (window.sound && typeof window.sound.playTone === 'function') {
                 window.sound.playTone(isTargetLight ? 520 : 380, 0.18, 'sine', 0.12);
               }
-            } catch (_) {}
+            } catch (_) { }
           }, 140);
           setTimeout(() => {
             try {
               if (window.sound && typeof window.sound.playTone === 'function') {
                 window.sound.playTone(isTargetLight ? 680 : 260, 0.22, 'sine', 0.08);
               }
-            } catch (_) {}
+            } catch (_) { }
           }, 320);
         }
       } catch (soundErr) {
@@ -1857,7 +1901,7 @@ class WaterWaveThemeEngine {
             document.documentElement.setAttribute('data-theme', targetTheme);
             try {
               localStorage.setItem('cognisphere_theme', targetTheme);
-            } catch (e) {}
+            } catch (e) { }
 
             const labelEl = document.getElementById('theme-orb-label');
             if (labelEl) labelEl.textContent = targetTheme === 'dark' ? 'Dark Mode' : 'Light Mode';
@@ -2034,3 +2078,483 @@ class WaterWaveThemeEngine {
 
 const waterWaveTheme = new WaterWaveThemeEngine();
 window.waterWaveTheme = waterWaveTheme;
+
+function initWalkthroughSystem() {
+  const params = new URLSearchParams(window.location.search);
+  const bodyId = document.body.id;
+
+  if (bodyId === 'home-page') {
+    if (params.has('walkthrough_done')) {
+      localStorage.setItem('cognisphere_walkthrough_completed', 'true');
+      showTourSuccessModal();
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+    const completed = localStorage.getItem('cognisphere_walkthrough_completed');
+    if (params.has('walkthrough_greeting') || !completed) {
+      setTimeout(() => {
+        showTourGreetingModal();
+      }, 350);
+      return;
+    }
+    return;
+  }
+
+  const step = params.get('walkthrough');
+  if (!step) return;
+
+  const validSteps = ['1', '2', '3'];
+  if (!validSteps.includes(step)) return;
+
+  startWalkthroughStep(parseInt(step, 10));
+}
+
+function startWalkthroughStep(stepNum) {
+  const preventScroll = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  };
+
+  const onKey = (e) => {
+    if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Space', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (e.key === 'Escape') {
+      skipWalkthrough();
+    }
+  };
+
+  function cleanupWalkthrough() {
+    document.documentElement.classList.remove('walkthrough-active');
+    document.body.classList.remove('walkthrough-active');
+    window.removeEventListener('wheel', preventScroll, { capture: true });
+    window.removeEventListener('touchmove', preventScroll, { capture: true });
+    window.removeEventListener('keydown', onKey, { capture: true });
+    const elOverlay = document.getElementById('walkthrough-backdrop');
+    if (elOverlay) elOverlay.remove();
+    const elFrame = document.getElementById('walkthrough-spotlight-frame');
+    if (elFrame) elFrame.remove();
+    const elCard = document.getElementById('walkthrough-card-element');
+    if (elCard) elCard.remove();
+  }
+
+  function skipWalkthrough() {
+    localStorage.setItem('cognisphere_walkthrough_completed', 'true');
+    if (typeof sound !== 'undefined') sound.click();
+    const elCard = document.getElementById('walkthrough-card-element');
+    const elBackdrop = document.getElementById('walkthrough-backdrop');
+    const elFrame = document.getElementById('walkthrough-spotlight-frame');
+    if (elCard) {
+      elCard.style.transition = 'opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+      elCard.style.opacity = '0';
+      elCard.style.transform = 'translateY(6px) scale(0.97)';
+    }
+    if (elBackdrop) elBackdrop.style.opacity = '0';
+    if (elFrame) elFrame.style.opacity = '0';
+    setTimeout(() => {
+      cleanupWalkthrough();
+      window.location.href = 'index.html';
+    }, 190);
+  }
+
+  const stepsData = {
+    1: {
+      badge: 'Step 1 of 3 • Upload',
+      title: 'Upload Documents & Recordings',
+      desc: 'Drop any PDF, document, audio recording, or video into this area. CogniSphere reads and indexes your content automatically so you can query it right away.',
+      prevUrl: 'index.html?walkthrough_greeting=1',
+      nextUrl: 'chat.html?walkthrough=2',
+      nextLabel: 'Next: Chat',
+      getTarget: () => document.getElementById('drop-zone')
+    },
+    2: {
+      badge: 'Step 2 of 3 • Chat',
+      title: 'Ask Questions with Citations',
+      desc: 'Type any question about your files into this box. CogniSphere searches through your uploaded materials and answers with direct citations to specific pages and audio timestamps.',
+      prevUrl: 'upload.html?walkthrough=1',
+      nextUrl: 'history.html?walkthrough=3',
+      nextLabel: 'Next: Library',
+      getTarget: () => document.querySelector('.chat-input-bar') || document.querySelector('#chat-textarea')
+    },
+    3: {
+      badge: 'Step 3 of 3 • Library',
+      title: 'Knowledge Library & History',
+      desc: 'All your uploaded files and past conversation sessions are stored here. Switch between tabs to review prior discussions or manage documents anytime.',
+      prevUrl: 'chat.html?walkthrough=2',
+      nextUrl: 'index.html?walkthrough_done=1',
+      nextLabel: 'Finish Walkthrough',
+      getTarget: () => {
+        const tabs = document.querySelector('.tabs');
+        const toolbar = document.querySelector('.toolbar');
+        if (tabs && toolbar) {
+          const tRect = tabs.getBoundingClientRect();
+          const tbRect = toolbar.getBoundingClientRect();
+          return {
+            getBoundingClientRect: () => ({
+              left: Math.min(tRect.left, tbRect.left),
+              top: tRect.top,
+              right: Math.max(tRect.right, tbRect.right),
+              bottom: tbRect.bottom,
+              width: Math.max(tRect.right, tbRect.right) - Math.min(tRect.left, tbRect.left),
+              height: tbRect.bottom - tRect.top
+            })
+          };
+        }
+        return document.querySelector('.tabs') || document.querySelector('.toolbar') || document.querySelector('.main-content');
+      }
+    }
+  };
+
+  const currentData = stepsData[stepNum];
+  if (!currentData) return;
+
+  if (stepNum === 1) {
+    const dropZone = document.getElementById('drop-zone');
+    if (dropZone) {
+      const dropRect = dropZone.getBoundingClientRect();
+      const dropDocTop = dropRect.top + window.scrollY;
+      window.scrollTo(0, Math.max(0, dropDocTop - 65));
+    }
+  } else {
+    window.scrollTo(0, 0);
+  }
+
+  document.documentElement.classList.add('walkthrough-active');
+  document.body.classList.add('walkthrough-active');
+
+  window.addEventListener('wheel', preventScroll, { passive: false, capture: true });
+  window.addEventListener('touchmove', preventScroll, { passive: false, capture: true });
+  window.addEventListener('keydown', onKey, { capture: true });
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'walkthrough-backdrop';
+  backdrop.className = 'walkthrough-backdrop';
+  document.body.appendChild(backdrop);
+
+  const spotlightFrame = document.createElement('div');
+  spotlightFrame.id = 'walkthrough-spotlight-frame';
+  spotlightFrame.className = 'walkthrough-spotlight-frame';
+  document.body.appendChild(spotlightFrame);
+
+  const card = document.createElement('div');
+  card.id = 'walkthrough-card-element';
+  card.className = 'walkthrough-card';
+  card.innerHTML = `
+    <div class="walkthrough-card-top">
+      <span class="walkthrough-step-badge">
+        <span class="walkthrough-step-dot"></span>
+        <span>${currentData.badge}</span>
+      </span>
+      <button class="walkthrough-skip-btn" id="wt-skip-btn">Skip Tour</button>
+    </div>
+    <h3 class="walkthrough-card-title">${currentData.title}</h3>
+    <p class="walkthrough-card-desc">${currentData.desc}</p>
+    <div class="walkthrough-card-footer">
+      <div class="walkthrough-dots-indicator">
+        <span class="walkthrough-dot ${stepNum === 1 ? 'active' : ''}"></span>
+        <span class="walkthrough-dot ${stepNum === 2 ? 'active' : ''}"></span>
+        <span class="walkthrough-dot ${stepNum === 3 ? 'active' : ''}"></span>
+      </div>
+      <div class="walkthrough-actions-group">
+        ${currentData.prevUrl ? `<button class="walkthrough-btn-ghost" id="wt-back-btn">Back</button>` : ''}
+        <button class="walkthrough-btn-primary" id="wt-next-btn">
+          <span>${currentData.nextLabel}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(card);
+
+  document.getElementById('wt-skip-btn').addEventListener('click', skipWalkthrough);
+
+  const backBtn = document.getElementById('wt-back-btn');
+  if (backBtn && currentData.prevUrl) {
+    backBtn.addEventListener('click', () => {
+      if (typeof sound !== 'undefined') sound.click();
+      card.style.transition = 'opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(6px) scale(0.97)';
+      backdrop.style.opacity = '0';
+      spotlightFrame.style.opacity = '0';
+      setTimeout(() => {
+        cleanupWalkthrough();
+        window.location.href = currentData.prevUrl;
+      }, 190);
+    });
+  }
+
+  document.getElementById('wt-next-btn').addEventListener('click', () => {
+    if (typeof sound !== 'undefined') sound.click();
+    if (stepNum === 3) {
+      localStorage.setItem('cognisphere_walkthrough_completed', 'true');
+    }
+    card.style.transition = 'opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(-6px) scale(0.97)';
+    backdrop.style.opacity = '0';
+    spotlightFrame.style.opacity = '0';
+    setTimeout(() => {
+      cleanupWalkthrough();
+      window.location.href = currentData.nextUrl;
+    }, 190);
+  });
+
+  function updateLayout() {
+    const target = currentData.getTarget();
+    if (!target) return;
+
+    const rect = target.getBoundingClientRect();
+    const pad = 8;
+    const x1 = Math.max(0, Math.round(rect.left - pad));
+    const y1 = Math.max(0, Math.round(rect.top - pad));
+    const x2 = Math.min(window.innerWidth, Math.round(rect.right + pad));
+    const y2 = Math.min(window.innerHeight, Math.round(rect.bottom + pad));
+    const spotW = Math.max(0, x2 - x1);
+    const spotH = Math.max(0, y2 - y1);
+
+    backdrop.style.clipPath = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${x1}px ${y1}px, ${x2}px ${y1}px, ${x2}px ${y2}px, ${x1}px ${y2}px, ${x1}px ${y1}px)`;
+
+    spotlightFrame.style.left = `${x1}px`;
+    spotlightFrame.style.top = `${y1}px`;
+    spotlightFrame.style.width = `${spotW}px`;
+    spotlightFrame.style.height = `${spotH}px`;
+
+    const cardWidth = Math.min(420, window.innerWidth - 32);
+    const cardHeight = Math.max(180, card.offsetHeight || 220);
+    let cardLeft = Math.max(12, Math.min(window.innerWidth - cardWidth - 12, Math.round(x1 + (spotW - cardWidth) / 2)));
+    let cardTop;
+
+    if (stepNum === 2) {
+      cardTop = y1 - cardHeight - 14;
+    } else if (window.innerHeight - y2 >= cardHeight + 14) {
+      cardTop = y2 + 14;
+    } else if (y1 >= cardHeight + 14) {
+      cardTop = y1 - cardHeight - 14;
+    } else if (window.innerHeight - y2 >= y1) {
+      cardTop = y2 + 10;
+    } else {
+      cardTop = Math.max(12, y1 - cardHeight - 10);
+    }
+
+    if (cardTop < y2 && (cardTop + cardHeight) > y1) {
+      if (window.innerHeight - y2 >= y1) {
+        cardTop = y2 + 8;
+      } else {
+        cardTop = Math.max(8, y1 - cardHeight - 8);
+      }
+    }
+
+    cardTop = Math.max(10, Math.min(window.innerHeight - cardHeight - 10, cardTop));
+    cardLeft = Math.max(10, Math.min(window.innerWidth - cardWidth - 10, cardLeft));
+
+    card.style.left = `${cardLeft}px`;
+    card.style.top = `${cardTop}px`;
+  }
+
+  requestAnimationFrame(updateLayout);
+  setTimeout(updateLayout, 80);
+  setTimeout(updateLayout, 220);
+
+  window.addEventListener('resize', updateLayout);
+}
+
+function showTourSuccessModal() {
+  if (typeof sound !== 'undefined') sound.success();
+
+  window.scrollTo(0, 0);
+  document.documentElement.classList.add('walkthrough-active');
+  document.body.classList.add('walkthrough-active');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'walkthrough-success-overlay';
+  overlay.id = 'walkthrough-success-overlay';
+
+  overlay.innerHTML = `
+    <div class="walkthrough-success-modal">
+      <div class="walkthrough-success-icon-wrap">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <span class="walkthrough-step-badge">
+        <span class="walkthrough-step-dot"></span>
+        <span>Walkthrough Complete</span>
+      </span>
+      <h2 class="walkthrough-success-title">You're All Set</h2>
+      <p class="walkthrough-success-desc">
+        Welcome to CogniSphere. You are ready to upload documents, ask questions with exact citations, and manage your knowledge library.
+      </p>
+      <div class="walkthrough-success-actions">
+        <a href="upload.html" class="walkthrough-btn-primary" id="tour-upload-first-btn" style="padding: 0.65rem 1.4rem; font-size: 0.95rem;">Upload Your First File</a>
+        <button class="walkthrough-btn-ghost" id="tour-close-success-btn" style="padding: 0.65rem 1.4rem; font-size: 0.95rem;">Explore Dashboard</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const dismissAndStay = () => {
+    localStorage.setItem('cognisphere_walkthrough_completed', 'true');
+    overlay.style.pointerEvents = 'none';
+    overlay.style.transition = 'opacity 0.28s ease';
+    overlay.style.opacity = '0';
+    document.body.style.animation = 'none';
+    document.body.style.filter = 'none';
+    document.body.style.transform = 'none';
+    setTimeout(() => {
+      overlay.remove();
+      document.documentElement.classList.remove('walkthrough-active');
+      document.body.classList.remove('walkthrough-active');
+    }, 290);
+  };
+
+  const dismissAndNavigate = () => {
+    localStorage.setItem('cognisphere_walkthrough_completed', 'true');
+    overlay.style.pointerEvents = 'none';
+    document.documentElement.classList.remove('walkthrough-active');
+    document.body.classList.remove('walkthrough-active');
+    overlay.style.transition = 'opacity 0.2s ease';
+    overlay.style.opacity = '0';
+    setTimeout(() => {
+      overlay.remove();
+    }, 210);
+  };
+
+  const closeBtn = document.getElementById('tour-close-success-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismissAndStay();
+    });
+  }
+
+  const uploadBtn = document.getElementById('tour-upload-first-btn');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismissAndNavigate();
+    });
+  }
+
+  const onModalKey = (e) => {
+    if (e.key === 'Escape') {
+      window.removeEventListener('keydown', onModalKey);
+      dismissAndStay();
+    }
+  };
+  window.addEventListener('keydown', onModalKey);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) dismissAndStay();
+  });
+}
+
+function showTourGreetingModal() {
+  window.scrollTo(0, 0);
+  document.documentElement.classList.add('walkthrough-active');
+  document.body.classList.add('walkthrough-active');
+
+  const preventScroll = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  };
+  window.addEventListener('wheel', preventScroll, { passive: false, capture: true });
+  window.addEventListener('touchmove', preventScroll, { passive: false, capture: true });
+
+  const onKey = (e) => {
+    if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Space', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (e.key === 'Escape') {
+      dismissGreeting(true);
+    }
+  };
+  window.addEventListener('keydown', onKey, { capture: true });
+
+  function cleanupGreeting() {
+    document.documentElement.classList.remove('walkthrough-active');
+    document.body.classList.remove('walkthrough-active');
+    window.removeEventListener('wheel', preventScroll, { capture: true });
+    window.removeEventListener('touchmove', preventScroll, { capture: true });
+    window.removeEventListener('keydown', onKey, { capture: true });
+  }
+
+  function dismissGreeting(markCompleted) {
+    if (markCompleted) {
+      localStorage.setItem('cognisphere_walkthrough_completed', 'true');
+    }
+    cleanupGreeting();
+    if (overlay) {
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.25s ease';
+      setTimeout(() => {
+        overlay.remove();
+      }, 260);
+    }
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'walkthrough-success-overlay';
+  overlay.id = 'walkthrough-greeting-overlay';
+
+  overlay.innerHTML = `
+    <div class="walkthrough-success-modal">
+      <div class="walkthrough-success-icon-wrap">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+        </svg>
+      </div>
+      <span class="walkthrough-step-badge">
+        <span class="walkthrough-step-dot"></span>
+        <span>Welcome to CogniSphere</span>
+      </span>
+      <h2 class="walkthrough-success-title">Welcome to CogniSphere</h2>
+      <p class="walkthrough-success-desc">
+        CogniSphere lets you ask questions directly to your documents, audio recordings, and videos with verified citations. Take a quick tour to see the key functionality.
+      </p>
+
+      <div class="walkthrough-success-actions">
+        <button class="walkthrough-btn-ghost" id="tour-greeting-skip-btn" style="padding: 0.65rem 1.4rem; font-size: 0.95rem;">Skip Tour</button>
+        <button class="walkthrough-btn-primary" id="tour-greeting-start-btn" style="padding: 0.65rem 1.4rem; font-size: 0.95rem;">
+          <span>Start Walkthrough</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const startBtn = document.getElementById('tour-greeting-start-btn');
+  if (startBtn) {
+    startBtn.addEventListener('click', () => {
+      if (typeof sound !== 'undefined') sound.click();
+      overlay.style.transition = 'opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1)';
+      overlay.style.opacity = '0';
+      setTimeout(() => {
+        cleanupGreeting();
+        window.location.href = 'upload.html?walkthrough=1';
+      }, 200);
+    });
+  }
+
+  const skipBtn = document.getElementById('tour-greeting-skip-btn');
+  if (skipBtn) {
+    skipBtn.addEventListener('click', () => {
+      if (typeof sound !== 'undefined') sound.click();
+      dismissGreeting(true);
+    });
+  }
+}
